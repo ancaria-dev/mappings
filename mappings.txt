@@ -1,0 +1,337 @@
+# Sacred Gold — mappings
+#
+# pureHD.exe v2.0.2.118, 32-bit, ImageBase 0x00400000.
+# NOTE: pureHD.exe is itself a community wrapper/mod (it ships with pHD.dll),
+# not the stock Sacred.exe.  Every address here is tied to THIS build.
+# RVA = VA - 0x00400000.  Frida uses RVA (`baseAddress.add(rva)`), Ghidra/CE
+# use VA.  Both are given because mixing them up silently produces a hook that
+# never fires (see CLAUDE.md, "A silently dead hook is usually a wrong RVA").
+#
+# Append-only in spirit: add rows as they are confirmed, correct rows that turn
+# out wrong, and never delete a row without saying why in the notes column.
+#
+# CONF column:  confirmed = observed live (hook fired / value matched the UI)
+#               static    = read from the disassembly, not yet seen at runtime
+#               suspect   = plausible, contradicted or untested
+#
+# Export tags: mappings.json is BUILT from this file by mappings.generator.py.
+# A row Coderpack uses carries a tag at the start of its notes column:
+#     [key=hpDamage]         -> exported as rva.hpDamage (or va.* for a global)
+#     [key=hpDamage hooked]  -> and the agent attaches to it, so hooksafe.py
+#                               checks the site for a trampoline hazard
+# A row without a tag is documentation only.  Keys are unique across the file;
+# two rows for the same address (both spellings of commitStats, say) may carry
+# at most one key between them.  Never hand-edit mappings.json.
+#
+# Calling conventions: thiscall = ECX is `this`, stack args, callee cleans.
+#   In Frida, `this` is the FIRST declared argument:
+#     new NativeFunction(addr, 'int', ['pointer'], { abi: 'thiscall' })
+#   cdecl (`mscdecl` in Frida) = all args on the stack, caller cleans.
+
+
+## ============================================================================
+## FUNCTIONS
+## ============================================================================
+# VA          RVA        NAME                              CONV/ARGS -> RET                        CONF       NOTES
+
+0x00604380  0x204380   cObjectManager::getLocalHero      thiscall() -> cCreatureHero*             confirmed  [key=getLocalHero hooked] NULL on the main menu. The hero-capture point for every hook.
+0x007D7F30  0x3D7F30   getGameState                      cdecl() -> cGameState*                   confirmed  Lazily creates the singleton at global 0x0182DB68. [gs+0x14] = player id.
+0x00425290  0x025290   getPlayerStats                    cdecl(int playerId) -> cStats*           confirmed  Journal/statistics block. Returned 0x00AA4518 (static) in single player.
+0x005FE550  0x1FE550   cObjectManager::objectByIndex     thiscall(int) -> cObject*                confirmed  Used by combat code and by pickupItem to resolve a ref. `test esi,esi / je` at the top: ref 0 returns NULL, and so does any ref past [mgr+8]-[mgr+4] >> 2. Coderpack reimplements the lookup in JS (pure reads) rather than calling it -- the mismatch branch at 0x005FE577 WRITES [obj+0xC].
+
+# --- combat / health ---------------------------------------------------------
+0x0056B3E0  0x16B3E0   applyDamage (huge dispatcher)      thiscall?, 3 callers                     confirmed  Contains every current-HP write below. Callers +0xCD80B, +0xCD8C9, +0x132457.
+0x0056FB90  0x16FB90   .. lethal write                    mov [ebp+0x130], esi (esi = 0)           confirmed  [key=hpLethal hooked] EBP = sheet. Fires PlayerDeath. NOT cancelable: ESI is reused as a zero constant right after.
+0x0056FBD9  0x16FBD9   .. survive-with-1 write            mov [ebp+0x130], 1                       static     [key=hpSurvive hooked] Immediate operand, nothing to rewrite.
+0x0056FC42  0x16FC42   .. damage subtract                 sub eax, ecx                             confirmed  EAX = current HP, ECX = damage.
+0x0056FC44  0x16FC44   .. damage commit                   mov [ebp+0x130], eax                     confirmed  [key=hpDamage hooked] THE melee/damage hook. Mutable: rewrite EAX. ~5 calls/s peak in combat.
+0x0056FC5A  0x16FC5A   .. overheal clamp                  mov [ebp+0x130], eax (eax = max)         confirmed  [key=hpClamp hooked]
+0x00562D10  0x162D10   regen write                        mov [ebp+0x130], edi                     confirmed  DO NOT HOOK: per creature per tick (~10/s for the player alone).
+0x0054988D  0x14988D   setCreatureStat                    thiscall(int idx, int value)             confirmed  mov [ecx+eax*4+0x4D0], edx. idx 0..2 -> +0x4D0/+0x4D4/+0x4D8 (hp mirror / max / current).
+0x00549860  0x149860   getCreatureStat                    thiscall(int idx) -> int                 static     Same table, read side.
+0x00565BA0  0x165BA0   commitStats (gear/level recalc)    thiscall(sheet)                          confirmed  [key=commitStats hooked] Writes [sheet+0x12C] = max HP. Cold: the snapshot-diff point for derived stats.
+0x00579950  0x179950   cCreatureHero::CalcResults         thiscall(sheet)                          static     42 callers. Recomputes attributes from gear; writes at +0x179B09.. DO NOT hook (runs per creature on save load).
+0x00569020  0x169020   cCreatureHero::gethitvalu          thiscall(sheet)(int type, void* out, ?)  static     5 callers. Combat hit/resistance calculation, reads the float block.
+
+# --- progression -------------------------------------------------------------
+0x0057EAE4  0x17EAE4   addExperience write                mov [ebx+0x0C], eax                      confirmed  [key=expWrite hooked] EBX = sheet, EAX = new total, ESI = gain. Clamps to 0x9A31718F.
+0x00580241  0x180241   AddGold delta                      xor ebx, ebx                             suspect    DO NOT HOOK: 2 bytes, so the patch swallows `cmp` and `jle` and has to relocate the branch. Crashed the game on world load. Boost at 0x0058023A instead.
+0x00580030  0x180030   AddGold(this=sheet, int delta)     mov eax, fs:[0]                          confirmed  [key=goldDelta hooked] thiscall. THE boost point: a function entry, so Frida tracks a real return address and relocates a 6-byte instruction that touches neither the stack nor the flags. args[0] is the delta and ECX is the sheet; args[0] is the same dword as [esp+0x94] at +0x18023A (the prologue pushes exactly 0x90 bytes). Every mid-function site in this function has crashed the game -- boost here.
+0x0058023A  0x18023A   AddGold delta argument load        mov eax, [esp+0x94]                      suspect    DO NOT HOOK: AddGold returned with the callee-saved EDI destroyed, so its caller 0x005803C0 faulted at 0x005805E9 on `cmp [edx+0xc], eax` (edx = [edi+4]). Crashed every world load. ESP-relative, like the epilogue at +0x1803A4 that failed the same way -- suspicious but unproven. Use the entry 0x00580030.
+0x0058027F  0x18027F   AddGold final write                mov [edi+0x46], ecx                      suspect    DO NOT HOOK: 3 bytes, and `jmp 0x580282` at +0x180267 lands inside the trampoline. Use 0x00580282.
+0x00580282  0x180282   .. just after the gold write       mov eax, [edi+4]                         suspect    DO NOT HOOK: the 6-byte patch swallows `cmp [eax+0xc], ebx` while the `je` that reads its flags stays outside, so the branch depends on whatever the trampoline's return path leaves in EFLAGS. Crashed the game on world load. Gold totals are read from the epilogue instead.
+0x005802E5  0x1802E5   AddGold sheet->full sync           cmp esi, ebx                             suspect    DO NOT HOOK: 2 bytes, so the patch also swallows a `je rel32` that has to be relocated. Coderpack copies sheet->full on a tick instead.
+0x005803A4  0x1803A4   AddGold epilogue                   mov ecx, [esp+0x84]                      suspect    DO NOT HOOK: ESP-relative, same unexplained failure as 0x0058023A. Mirror refresh (0x0182DDDC / 0x0182DDE0) is done by Coderpack on a tick instead.
+0x00581140  0x181140   grantOrSpend (StatGrant)           thiscall(sheet)(int reason)              confirmed  [key=statGrant hooked] reason 0..5 = spend an attribute point (0 Str .. 5 Cha), 7 = level-up rewards. Cold. Attribute/skill point events ride on this.
+0x005827DA  0x1827DA   skill slot write                   mov [eax+edi+0x2c], cl                   suspect    DO NOT HOOK: 4 bytes long, so Frida's trampoline covers 0x005827DE, and two jmps (+0x5827C9, +0x5827D6) land exactly there. Crashes on hero load for a character with empty skill slots. Use 0x005827DE instead.
+0x005827DE  0x1827DE   .. just after the skill write      mov ax, [edi+0x42]                       confirmed  [key=skillWrite hooked] The safe hook for skills: EAX = slot, EDI = sheet, EBX = delta, the byte at [edi+eax+0x2c] already holds the new value. 0 branches land inside the patch area.
+#                                                                                                              CALLABLE: verified live -- grantOrSpend(sheet, 0) gave strength +1, attributePoints -1 AND recalculated max HP (+32). Calling it beats writing the field.
+0x0057E410  0x17E410   cCreatureHero::addExperience       thiscall(sheet)(int amount) -> int        confirmed  [key=addExperience] CALLABLE: +1,000,000 XP applied cleanly. Ignores negatives (early-out at +0x17E43A), clamps to 0x9A31718F itself. 9 callers. The engine-side "AddExp".
+0x00549920  0x149920   addExperienceOnCreature            thiscall(full)(int amount)               static     Thin wrapper: adds 0x3A8 and tail-calls addExperience.
+0x00549880  0x149880   setCreatureStat                    thiscall(full)(int value, int index)     confirmed  [key=setCreatureStat] CALLABLE: setCreatureStat(full, 5000, 2) set current HP to 5000. index 0/1/2 -> +0x4D0/+0x4D4/+0x4D8. The engine-side "SetHP".
+0x00565BA0  0x165BA0   commitStats                        thiscall(sheet)                          confirmed  CALLABLE: forces the derived-stat recalc after writing an attribute.
+0x005827F0  0x1827F0   skill points write                                                           confirmed  [key=skillPoints hooked] Same function, remaining-points half. NOTE: the demo hook here multiplies by 10 and wrapped sheet+0x42 to 65535 on the live save.
+0x00585EBE  0x185EBE   level word write                   mov [ebx+0x56], ax                       confirmed  [key=levelWrite] DO NOT HOOK. Crashes the game on every load from a save (a fresh level-1 character is fine). 4 bytes, so the patch swallows the next instruction, and `mov edx,[ebx+4]` 3 bytes earlier is consumed by `cmp [edx+0xc],0x10` twenty bytes later -- the same shape that killed gold twice. Level events are a tick snapshot of full+0x3FE instead (agent/src/80-level.js).
+0x00641249  0x241249   per-record tick counter            inc [edi+0x18]                           confirmed  NOT the combat-art level -- see the correction below. Hook stays disabled.
+0x00640E70  0x240E70   refreshWorldObjectRecords          thiscall(obj), 8 callers                 confirmed  Iterates a std::vector of 32-byte records: [obj+0x40] = begin, [obj+0x44] = end. Live dump: 1545 records, record 0 points at the hero, and +0x18 counts refreshes (11670 / 628 / 8 -- not levels).
+0x00589660  0x189660   combatArtTooltip                   thiscall, builds name + "Level: N"        confirmed  2 callers. Formats '\n\n%s\n\n%s %s: %d' at +0x189A65 (description, "Current", "Level", level) and '%s%s' at +0x189B41 (colour code + NAME). The level arrives as an argument; its storage is still unknown.
+0x0058FEAA  0x18FEAA   combatArtStatsTooltip A                                                     confirmed  '%s: %.1fs\n%s: %+d%%\n%s %+d%%\n%s %+d\n%s: %d' -- regeneration / bonuses.
+0x0059007B  0x19007B   combatArtStatsTooltip B                                                     confirmed  '%s: %.1fs\n%s: %d%%\n%s %+d\n%s: %ds'.
+0x00580E1B  0x180E1B   readCombatArtLevel                 movzx cx, [ebp + idx*22 + 6]             confirmed  EBP = the authoritative 22-byte-record array. Runs ~60x/s (cache refill) -- read it here, do NOT hook it.
+0x00580E0F  0x180E0F   readCombatArtBonus                 mov al, [ebp + idx*22 + 7]               confirmed
+0x00580E2D  0x180E2D   combat art cache refill                                                     confirmed  Writes the 16-byte display cache. This is what undoes a write to the cache.
+
+# --- journal / statistics ----------------------------------------------------
+0x004244A8  0x0244A8   opponentsDefeated write            mov [ebp+0x56F0], eax                    confirmed  EBP = cStats. EAX already incremented. Fires once per kill.
+0x004246D0  0x0246D0   incrementResurrections             thiscall(cStats)                         confirmed  Whole function; also zeroes +0x570C (survival-bonus timer). The reliable "player really died" signal.
+0x004249C0  0x0249C0   discoveredAreas++                  inc [ecx+0x56EC]                         confirmed
+0x00424C10  0x024C10   getPlayingTime                     thiscall(cStats)(int* h, int* m, int* s) confirmed  Reads +0x56F8 / +0x56FC / (+0x5700 / 1000).
+0x004249D0  0x0249D0   getWorldDiscovered                 thiscall(cStats)(int) -> float           static     +0x56EC / total.
+0x00424650  0x024650   getSecondsSinceDeath               thiscall(cStats) -> int                  confirmed  +0x570C / 1000.
+0x00424C40  0x024C40   setOpponentsDefeated               thiscall(cStats)(int)                    confirmed  ONLY called from save/load (0x00605DF0) -- useless as a hook.
+0x00424C50  0x024C50   setResurrections                   thiscall(cStats)(int)                    confirmed  Same caveat.
+
+# --- derived stats (character sheet) ----------------------------------------
+0x00564500  0x164500   getArmorBonusPercent               thiscall(sheet) -> int                   confirmed  Matched the UI exactly (430).
+0x00564550  0x164550   getPercentStat2                    thiscall(sheet) -> int                   suspect    Returned 563; the row it feeds is not identified yet.
+0x005641D0  0x1641D0   getResistMinMax                    thiscall(sheet)(float* min, float* max)  confirmed  min/max over sheet[0x66+4i] * sheet[0xD6+4i].
+0x00564280  0x164280   getDamageType0                     thiscall(sheet)(float* a, float* b)      static     Four back-to-back calls at +0x2AB700..74B.
+0x00564320  0x164320   getDamageType1                     thiscall(sheet)(float* a, float* b)      static
+0x005643C0  0x1643C0   getDamageType2                     thiscall(sheet)(float* a, float* b)      static
+0x00564460  0x164460   getDamageType3                     thiscall(sheet)(float* a, float* b)      static
+0x00585290  0x185290   getAttackSpeed                     thiscall(sheet) -> int                   confirmed  Matched the UI (220). Base at sheet+0x3C.
+0x00566020  0x166020   survivalCurve                      cdecl(float lo, float x, float span,     confirmed  = 100 * (1 - 1/(1 + (x-1)/span)) with lo=0, hi=50.
+#                                                                float hi) -> float                           Called as (0.0, minutesSinceDeath, 120.0, 50.0).
+0x00424000  0x024000   toHitPercent?                      cdecl(4 args) -> float                   suspect    Feeds the "To Hit 97%" row.
+0x005CDC40  0x1CDC40   getWeaponDamageRange               thiscall(...)(out args)                  suspect    "Weapon 875-1153".
+0x005CDCD0  0x1CDCD0   getCombatArtDamageRange            thiscall(...)(out args)                  suspect    "Combat Arts 1075-1075".
+
+# --- world objects / inventory ------------------------------------------------
+0x005FBA80  0x1FBA80   cObjectManager::create             thiscall(mgr)(int ref, ...)              confirmed  ref is the FIRST stack arg (frame arithmetic says the second -- it is wrong, verified live). 0-50 calls/s in play, ~3000 during world load. A full reload with this hooked survived.
+0x005FC300  0x1FC300   cObjectManager::destroy            thiscall(mgr)(int ref, ...)              confirmed  0-68 calls/s.
+0x00603260  0x203260   cObjectManager::load               thiscall                                 confirmed  [key=worldLoad hooked] Logs "%d objects (freeslot=%d)". Hook the ENTRY only; the body is the ~3000-object loop.
+0x00605DF0  0x205DF0   loadHero / hero (de)serialize      thiscall                                 confirmed  [key=heroLoad hooked] Runs on load AND on save -- report what changed, do not assume a direction.
+0x006075E0  0x2075E0   cObjectManager::terminateHero      thiscall                                 confirmed  [key=heroTerminate hooked] The point where hero pointers must be dropped.
+0x00558340  0x158340   cCreature::pickupItem              thiscall(creature)(int ref, ...)         confirmed  [key=itemPickup hooked] Verified live: a1 resolved to the item that was picked up. CANCELABLE AND SUBSTITUTABLE, and both fall out of the game's own code rather than a trick: the function derives everything from objectByIndex(ref) and, when that returns NULL, `je 0x0055937C` at +0x00558380 jumps straight to the epilogue. So args[0]=0 is the game's own no-op path, and args[0]=<other ref> picks up a different object. Arg slot checked, not derived: the body reads it at [esp+0x6C] after pushing 0x68 bytes, i.e. [esp+4] at entry = args[0].
+#                                                                                                            Hook the ENTRY. ASK only when ECX is the hero -- the other 3 callers are creature AI and the rate there is unmeasured.
+0x00549660  0x149660   cCreature::inventory_putItem       thiscall(creature)(int ref, ...)         static     [key=itemStore hooked] Entry hooked read-only (item.stored). Prologue `sub esp,0xC / push ebp / mov ebp,[esp+0x14]` = 8 bytes before the arg read, so args[0] is the ref.
+0x005560C0  0x1560C0   cCreature::equipment_equip         thiscall(creature)(int slot, int ref,    confirmed  [key=itemEquip hooked] Prologue bounds the slot at 0x12. ref 0 = clear the slot. Observed slots: 5 arms, 10/11 rings, 12/13 weapon-hand.
+#                                                                   int nn)
+0x00611850  0x211850   cEngine::creature_equipItem        thiscall                                 static
+0x005DF190  0x1DF190   cInventory::moveItem               thiscall(inv)(u16 src, u16 dst)          confirmed  [key=itemMove hooked] Entry hooked read-only (item.moved). Slot indices only -- no item identity on this path.
+
+# --- names / localization ----------------------------------------------------
+0x00673360  0x273360   uiString (localized lookup)        thiscall(any)(const char* key) -> entry*  confirmed  [key=uiStringFn] CALLABLE. Hashes the ASCII key, looks it up in the global dictionary at 0x0182DCD0, returns entry+8; the STRING POINTER is *(wchar**)result. ECX is only used on a miss (returns this+0xC), so any readable pointer works. 415 call sites. Verified: UI_STATS_VICTORY -> "Opponents Defeated", UI_REGION_REGION -> "Region". This is the general way to get LOCALIZED text -- never hardcode English tables.
+0x0043CED0  0x03CED0   typeName                           cdecl(int typeId) -> const char*         confirmed  [key=typeNameFn] CALLABLE. Internal type name for any object/creature; the record is fixed-size and padded, so cut at the first byte >= 0x80. Verified: 9 -> TYPE_NPC_DAEMONIN, 50 -> TYPE_NPC_GHUL01, 100 -> TYPE_NPC_DRAGON_ICE03, 1879 -> TYPE_NPC_BOAT. Invalid ids return a "Bad Item" record. The type id is `[creature+0x10]` -- the same field that is 1..9 for hero classes.
+0x0080E1B0  0x40E1B0   hashKey                            cdecl(const char*) -> int                static     Used by uiString.
+0x0080E200  0x40E200   dictLookup                         thiscall(dict)(int hash)                 static     Global dictionary lives at 0x0182DCD0.
+
+# --- UI ----------------------------------------------------------------------
+0x006588F0  0x2588F0   uiFormat (wide sprintf wrapper)    cdecl(wchar* out, const wchar* fmt, ...) confirmed  THE probe point: hook it, read the return address, and every on-screen number maps to the code that computed it (analysis/ui_format_trace.py).
+0x006A98F0  0x2A98F0   cUI_StatisticsChar::build          thiscall                                 confirmed  The character-sheet screen.
+0x006DEF80  0x2DEF80   journalStatisticsPage::build       thiscall                                 confirmed  Playing time / opponents / resurrections / world %.
+0x006AF5A0  0x2AF5A0   cUI_Diary::build                   thiscall                                 static
+0x00673300  0x273300   uiControlById                      thiscall(int id) -> control*             static
+
+# --- misc / runtime ----------------------------------------------------------
+0x007F4160  0x3F4160   cCreatureHero::debugInfo dump      thiscall                                 static     Prints Name/Class/Exp/Gold/Hitpoints. Class switch table at 0x007F4B64.
+0x00849134  0x449134   _ftol                              cdecl                                    static     Truncates toward zero -- match it when replicating a displayed number.
+0x00538F75  0x138F75   anti-cheat checker (phase 2)                                                 confirmed  Resets a field to 1 when its XOR mirror disagrees.
+0x006228C0  0x2228C0   worldToPPOS                                                                  confirmed  [key=posConvert hooked] trunc(world / 53.66563034057617), divisor at PE float 0x00891044.
+0x006254B0  0x2254B0   cWorldView::setViewPosition        thiscall(int x, int y)                   confirmed  [key=posCamera hooked] Camera pan (the inventory nudges it ~100 units). Args are NOT player coords -- used only as a trigger to resample hero+0x1C.
+0x00891044  0x491044   PPOS divisor (float)               data = 53.66563034057617                 confirmed  [key=posScale] Read by worldToPPOS. HUD position = trunc(world / this), truncating toward zero to match _ftol.
+
+
+## ============================================================================
+## STRUCTURES
+## ============================================================================
+# cCreatureHero ("full object").  sheet = full + 0x3A8.
+
+# OFFSET   TYPE     NAME                       CONF       NOTES
++0x10      dword    classId                    confirmed  1 Seraphim, 2 Gladiator, 3 Battlemage, 4 Dark Elf, 5 Wood Elf, 6 Vampiress(knight), 7 Vampiress(vamp), 8 Dwarf, 9 Succubus = UI "Daemon".
++0x1C      dword    worldX                     confirmed  Can go stale while walking.
++0x20      dword    worldY                     confirmed
++0x38      byte     regionId                   static     Also the anti-cheat XOR key, broadcast to 4 bytes.
++0x3A8     struct   sheet                      confirmed  The embedded character sheet, offsets below.
++0x3B4     dword    experience                 confirmed  == sheet+0x0C
++0x3B8..C2 word[6]  strength..charisma         confirmed  == sheet+0x10..0x1A
++0x3C4..C9 byte[6]  equipment attribute bonus  static
++0x3CB     byte     attributePoints            confirmed  == sheet+0x23
++0x3EA     word     skillPoints                confirmed  == sheet+0x42
++0x3EE     dword    gold                       confirmed  == sheet+0x46
++0x3FE     word     level                      confirmed  == sheet+0x56
++0x4D0     dword    currentHp mirror           confirmed  Lags ~1 behind during regen.
++0x4D4     dword    maxHp                      confirmed  == sheet+0x12C
++0x4D8     dword    currentHp                  confirmed  == sheet+0x130  <-- combat writes it via the SHEET base
+
+# sheet (= full + 0x3A8)
++0x0C      dword    experience                 confirmed
++0x10      word     strength                   confirmed
++0x12      word     endurance                  confirmed
++0x14      word     dexterity                  confirmed
++0x16      word     physicalRegeneration       confirmed
++0x18      word     mentalRegeneration         confirmed
++0x1A      word     charisma                   confirmed
++0x23      byte     attributePoints            confirmed
++0x2C..    byte[]   skills, one per slot        confirmed  UI order, up to 8, set is class-dependent.
++0x3C      word     attackSpeedBase            confirmed  Matches the "Attack Speed" row.
++0x40      word     movementSpeed              confirmed  Matches the "Movement Speed" row (164).
++0x42      word     skillPoints                confirmed
++0x46      dword    gold                       confirmed
++0x4A..56  word[7]  unidentified               suspect    NOT the resistances.
++0x56      word     level                      confirmed
++0x5A..E6  float[]  derived-stat block         confirmed  2-BYTE ALIGNED -- a dword-aligned dump shows garbage.
++0x66+4i   float    resistBase[i]              confirmed  i = physical, fire, magic, poison
++0xD6+4i   float    resistMult[i]              confirmed  resistance[i] = round(resistBase[i] * resistMult[i]); the UI total is their sum.
++0x128     dword    currentHp mirror           confirmed
++0x12C     dword    maxHp                      confirmed
++0x130     dword    currentHp                  confirmed
+
+# cStats (journal block; 0x00AA4518 in single player, reach it via getPlayerStats)
++0x56E8    dword    graphLevel                 confirmed
++0x56EC    dword    discoveredAreas            confirmed  World Discovered % = this / total.
++0x56F0    dword    opponentsDefeated          confirmed
++0x56F4    dword    resurrections              confirmed
++0x56F8    dword    playTimeHours              confirmed
++0x56FC    dword    playTimeMinutes            confirmed
++0x5700    dword    playTimeMillis             confirmed
++0x570C    dword    millisSinceLastDeath       confirmed  Zeroed by incrementResurrections; drives the survival bonus.
+
+# Combat arts -- CORRECTED.  The "32-byte record with the level at +0x18" from
+# the earlier session was a misattribution: that record belongs to the world
+# object refresh vector (see refreshWorldObjectRecords), where +0x18 is a tick
+# counter that happens to increase while playing.  What is actually confirmed
+# now, read out of the game's own tooltips:
+#
+#   * combat arts are addressed by SLOT, and the slot argument the UI passes is
+#     a byte offset stepping by 16 -- so the levels live in an array of 16-byte
+#     elements, one per art.
+#   * the Daemon has 12 slots.  Names and levels observed live:
+#
+#     slot  offset  name                             level (at the time of reading)
+#        0    0x00  Dread                            13
+#        1    0x10  Blazing Disc                     10
+#        2    0x20  Abysmal Choir                     3
+#        3    0x30  Call of Death                     5
+#        4    0x40  Tentacles                        13
+#        5    0x50  Infernal Power                    4
+#        6    0x60  Hell Sphere                       5
+#        7    0x70  Battle Daemon (Assail)           10
+#        8    0x80  Energy Daemon (Charged Bolts)     ?
+#        9    0x90  Fire Daemon (Wall of Fire)        9
+#       10    0xA0  Poison Daemon (Poison Ring)       9
+#       11    0xB0  Soaring Daemon (Descent)          8
+#
+# The storage was then found by watchpointing the cache and following the code
+# that refills it.  There are TWO arrays:
+#
+#   1. a display cache of 16-byte elements (level at +0x00, art id at +0x02),
+#      rewritten from the real store roughly every 15 ms -- writing a level
+#      there is visibly undone and never reaches the UI;
+#   2. the authoritative array of 22-byte records, whose base was captured as
+#      EBP at +0x180E1B.  The UI level is computed as base + bonus:
+#
+#          movzx cx, byte [ebp + idx*22 + 6]   ; base level      (+0x180E1B)
+#          mov   al,  byte [ebp + idx*22 + 7]  ; bonus from gear (+0x180E0F)
+#          add   ecx, eax                       ; what the tooltip prints
+#
+#      record layout (22 bytes):
+#          +0x00  dword  1 or 2   (aspect group?)
+#          +0x04  byte   art id   (0x3C..0x4E)
+#          +0x05  byte   aspect   (0x00 for the first group, 0x04 for the second)
+#          +0x06  byte   BASE LEVEL   <- writing here sticks and shows in the UI
+#          +0x07  byte   gear bonus
+#          +0x0A  float  per-art value (regeneration?)
+#          +0x0E  float  1.0
+#
+#      Confirmed live: after investing one rune each, Dread went 13 -> 14 and
+#      Abysmal Choir 3 -> 4 in this array.
+#
+#      Slot order here is NOT the UI order -- identify an art by the id byte:
+#          0x3C Blazing Disc      0x3F Infernal Power   0x40 Hell Sphere
+#          0x41 Tentacles         0x42 Abysmal Choir    0x43 Dread
+#          0x46 Soaring Daemon    0x49 Battle Daemon    0x4A Fire Daemon
+#          0x4B Poison Daemon     0x4C Energy Daemon    0x3E Call of Death
+#      (ids 0x44, 0x4D, 0x4E also appear in the array but not on the CA screen.)
+#
+#   Still open: the instruction that writes +0x06 when a rune is invested (the
+#   watchpoint above only caught the cache refill), and the array's owner --
+#   the base is a heap address, so a hook needs the code site, not this pointer.
+
+
+## ============================================================================
+## WORLD
+## ============================================================================
+# The world side is much less explored than the hero side.  What exists today:
+
+0x00493070  0x093070   cInterpretSQW::enterRegion         thiscall(int regionId)                   confirmed  Fires while walking; ids seen 1777..1999 -- map cells, not the named areas on the map screen.
+0x00493420  0x093420   cInterpretSQW::exitRegion          thiscall(int regionId)                   confirmed
+0x00493DD0  0x093DD0   cInterpretSQW::enterSector         thiscall(int x, int y)                   confirmed  Sectors seen: 56..58, 28..31.
+0x0062625B  0x22625B   showWorld: RainStart print site                                             confirmed  Hook point for "rain started".
+0x006263C7  0x2263C7   showWorld: RainStop print site                                              confirmed
+0x00625E27  0x225E27   showWorld: FogStart print site                                              confirmed
+0x00625FAB  0x225FAB   showWorld: FogStop print site                                               confirmed
+0x005C1760  0x1C1760   itemNameColour                     thiscall(?)(arg1, arg2) -> ARGB          confirmed  Walks a bit field and maps each set bit to a colour via the table below; the LAST set bit wins. Default 0xFFEFEFEF (white), and a special case returns white when (flags & 0xC0003F) == 0xC0003F. WHICH struct holds the bit field is NOT settled: the `arg2 == 0` branch reads `this+0x11C`, but the tooltip path passes a non-zero arg2, and the +0x11C values contradict the observed colours.
+0x0043C250  0x03C250   nameColourByIndex                  cdecl(int index) -> ARGB                 confirmed  1 = 0xFF87CEFA light blue (magic), 2 = 0xFFE38217 orange (rare), 3 = 0xFF6C4CE5, 4 = 0xFFA020F0 purple, 5 = 0xFF228B22 forest green (set), 6 = 0xFFB75555, 7 = 0xFF00FFFF, 8 = 0xFFFF6C00; default 0xFF000000.
+0x00623552  0x223552   cSector::debugSectorInfo                                                     static
+0x005FA7C4  0x1FA7C4   cObjectManager::getData            thiscall(int ref)                        static
+0x00451F90  0x051F90   script command name/id table build                                          confirmed  Pairs names with command ids: AddExp = 0x44, AddGold = 0x43, SetVar = 0x35, UnsetVarBit = 0x13, SetVarBit = 0x14, AddGems = 0x15, TriggerQuest = 0x3F, QuestBook = 0x40. The dispatcher that consumes an id is not mapped yet, so the script layer is NOT callable.
+
+# Day/night: the HUD has a day/night disc (UI_TB_DAYNIGHT, built at 0x006E4F10)
+# but it is drawn, not printed, so the format-trace trick does not apply.
+# Diffing the module's writable memory for steadily advancing values turned up:
+0x00AD3364  world phase? float                              suspect    ~4.31 rising 0.00224/s; if it wraps at 2*PI the cycle is ~47 min -- the right order for a day/night cycle. UNVERIFIED against the in-game clock.
+0x00AD53E4  slow float A                                    suspect    6.1926 rising 0.00014/s (~12.5 h per 2*PI).
+0x00AD5E8C  slow float B                                    suspect    Tracks 0x00AD53E4 exactly.
+0x017ED94C  slow float C                                    suspect    Tracks 0x00AD53E4 with a small offset.
+0x017E6C9C  counter                                         suspect    +812 per 5 s.
+
+# Already usable as world state today (see the cStats block): discovered areas
+# and the world-explored percentage, playing time, and the region byte on the
+# hero (full+0x38).
+
+
+# Item object (reached through the same ref -> object table as creatures).
+# Mapped by matching live tooltips: "Damaged Bracer of Oblivion" (armour) and
+# "Gallant Ring of Cinders" (ring).
++0x0C      dword    own ref                    confirmed
++0x10      dword    type id                    confirmed  -> typeName(); TYPE_ARMOR_* / TYPE_WEAPON_* / TYPE_OBJECT_RING_* ...
+#                                                        WRITABLE, but only together with its second copy at +0x118 -- writing this one alone renames and redraws the item and changes nothing else. Confirmed live: writing it renames the item and redraws it, and changes NOTHING else -- a rune retyped into another rune still upgrades the same combat art and still shows the original class in its tooltip, and a potion keeps its old price. So the effect and the price live on the instance, not behind the type. See +0x162/+0x182 for the effect; where the price comes from is still open (analysis/item_probe.py diffs two items to find it).
++0x118     dword    type id, SECOND COPY       confirmed  Equals +0x10 on every untouched item (checked on 4: runes 5398/5556, potions 5171/5140). THE reason retyping was cosmetic -- Coderpack wrote +0x10 and the game kept reading this. `type` in item.reshape now means both.
++0x11C     dword    flags                      suspect    Runes 0x800F1D01 / 0x800F1D02 (differ in the low byte), potions 0x00C01D3F / 0x40C01D3F (differ in bit 0x40000000). Category plus a bitfield; semantics unknown.
++0x120     dword    base value (price)         confirmed  Small red potion 400, large red 1200 -- exactly 3x. Runes 5 and 6. The displayed price is derived from it (it moves with charisma), which is why a retyped potion kept its old price.
++0x119     byte     percent modifier           confirmed  the "+7% to Attack" line
++0x12C     byte     minimum level              confirmed  bracer 26, ring 22
++0x131     byte     item level                 confirmed  bracer 35, ring 30
++0x144     byte     attack                     confirmed  bracer 8, sword 131
++0x14A     byte     protection A               confirmed  bracer 27
++0x14E     byte     protection B               confirmed  bracer 10 (the tooltip's [37] is A + B)
++0x134     byte     physical damage min        confirmed  rare sword "Physical: 109-148"
++0x13C     byte     physical damage max        confirmed
++0x162+4i  word     modifier id                confirmed  601 Weapon Lore, 802 fire resist, 805 physical resist, 809 attack %, 811 attack speed, 812 run speed, 814 regen special move, 817 endurance, 819 mental regen, 841 life leech, 858 spell resist
+#                                                        THIS is what an item does, as opposed to +0x10 which is what it is called. Exactly 8 slots: the id array (8 dwords from 0x162) ends where the value array (8 words from 0x182) begins. A rune's tooltip line ("Hard Hit: +1") and its class line both survive a type change, so the combat art a rune upgrades is expected to be in here -- UNVERIFIED, needs an own-class rune diffed against a foreign one.
++0x182+2i  word     modifier value             confirmed  pairs with the id array by index
++0x1E0     dword[]  socket-related             suspect    helmet "(0/3)" has three entries here, bracer "(0/1)" has one dword = 1; layout not settled
+# Set membership is a property of the TYPE, not the instance: a set sword
+# compared against 8 ordinary weapons had no unique field, and its type is its
+# own numbered entry (TYPE_WEAPON_2190) rather than a generic TYPE_WEAPON_SWORD.
+# NOT stored: price (4183) and "Expected Protection" (212) are computed, and
+# price depends on charisma.  The DISPLAY NAME is not stored either -- Sacred
+# composes it from affixes ("Damaged" + base + "of Oblivion"), so internalName
+# is the stable key and the localized name must be assembled via uiString.
+
+
+## ============================================================================
+## GLOBALS
+## ============================================================================
+0x0182DB68  gameState singleton pointer                    static
+0x0182DDDC  anti-cheat XOR mirror A                        confirmed  [key=xorMirror1]
+0x0182DDE0  anti-cheat XOR mirror B                        confirmed  [key=xorMirror2]
+0x00AA4518  cStats (single player)                         confirmed  Prefer getPlayerStats() over hardcoding this.
+0x00AA9CA0  player-stats table root                        static     Lazily allocated by getPlayerStats.
+0x00AA9C08  cStats+0x56F0 (opponents defeated) in SP        confirmed  Watchpoint target used to find the kill writer.
+0x00AA9C18  cStats+0x5700 (playing time ms) in SP           confirmed
+0x00AD4BC0  object manager pointer                         confirmed  [key=objectManager] [[0x00AD4BC0]+4] = ref -> object table, +8 = end.
+0x00AD6734  rain timer (float)                             confirmed  Time of the NEXT rain change -- both start and stop write it, so it is not an "is it raining" flag.
+0x00AD6730  fog timer (float)                              confirmed  Same for fog.
+0x0182DCD0  localized UI string dictionary                 confirmed  Reached through uiString (0x00673360).
