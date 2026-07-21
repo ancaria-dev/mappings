@@ -1,0 +1,38 @@
+{
+    // The address registry and the generator that reads it. Python, standard
+    // library only.
+    "editor.formatOnSave": true,
+    // No formatter is agreed for this repository, so whatever one a developer
+    // happens to have installed only gets to touch the lines they changed.
+    "editor.formatOnSaveMode": "modifications",
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.rulers": [80],
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+
+    "[json]": {
+        "editor.tabSize": 2
+    },
+
+    // mappings.txt is a fixed-width table -- the columns are padded by hand and
+    // rows are read by eye against the ones above them. Nothing may reflow it,
+    // and a trailing-whitespace trim would eat the padding of any row that ends
+    // in it. Rows run past 600 columns, so no ruler and no wrapping either.
+    "[plaintext]": {
+        "editor.formatOnSave": false,
+        "editor.rulers": [],
+        "editor.wordWrap": "off",
+        "files.trimTrailingWhitespace": false
+    },
+
+    "python.analysis.typeCheckingMode": "basic",
+
+    "files.exclude": {
+        "**/__pycache__": true
+    },
+    "files.watcherExclude": {
+        "**/__pycache__/**": true
+    }
+}
