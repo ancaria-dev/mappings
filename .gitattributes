@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Generated from mappings.txt, but tracked on purpose: the other repos read it
+# straight out of a checkout and never run the generator.
+mappings.json linguist-generated=true
