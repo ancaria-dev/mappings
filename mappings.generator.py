@@ -2,7 +2,7 @@
 
 mappings.txt is the only file a human edits; mappings.json is what Coderpack
 and every other consumer reads.  A row joins the build by carrying a tag in its
-notes column -- `[key=hpDamage]`, or `[key=hpDamage hooked]` for a site the
+notes column, `[key=hpDamage]` or `[key=hpDamage hooked]` for a site the
 agent attaches to.  Untagged rows stay documentation.
 
     python mappings.generator.py            write mappings.json
@@ -64,7 +64,7 @@ def parse(text):
             fail(line_no, f"Malformed address: “{first}”")
         address = int(first, 16)
 
-        # A two-address row is VA + RVA; a one-address row is a global (VA).
+        # A two-address row is VA + RVA. A one-address row is a global (VA).
         paired = second is not None and second.startswith("0x")
         if paired:
             if not HEX.match(second):

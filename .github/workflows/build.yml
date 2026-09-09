@@ -1,6 +1,6 @@
 # mappings.json is generated from mappings.txt and committed beside it. Every
 # consumer reads the JSON, so a row edited in the text file and not regenerated
-# gives the agent an address that is simply wrong -- and a wrong address does
+# gives the agent an address that is simply wrong, and a wrong address does
 # not throw, it gives a hook that silently never fires.
 #
 # Coderpack's CI already runs this check, but it runs it against mappings at

@@ -16,7 +16,7 @@
         "editor.tabSize": 2
     },
 
-    // mappings.txt is a fixed-width table -- the columns are padded by hand and
+    // mappings.txt is a fixed-width table: the columns are padded by hand and
     // rows are read by eye against the ones above them. Nothing may reflow it,
     // and a trailing-whitespace trim would eat the padding of any row that ends
     // in it. Rows run past 600 columns, so no ruler and no wrapping either.
