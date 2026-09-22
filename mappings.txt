@@ -107,8 +107,8 @@
 0x005CDCD0  0x1CDCD0   getCombatArtDamageRange            thiscall(...)(out args)                  suspect    "Combat Arts 1075-1075".
 
 # --- world objects / inventory ------------------------------------------------
-0x005FBA80  0x1FBA80   cObjectManager::create             thiscall(mgr)(int ref, ...)              confirmed  ref is the FIRST stack arg (frame arithmetic says the second but it is wrong, verified live). 0-50 calls/s in play, ~3000 during world load. A full reload with this hooked survived.
-0x005FC300  0x1FC300   cObjectManager::destroy            thiscall(mgr)(int ref, ...)              confirmed  0-68 calls/s.
+0x005FBA80  0x1FBA80   cObjectManager::create             thiscall(mgr)(int ref, ...)              confirmed  [key=objCreate hooked] ref is the FIRST stack arg (frame arithmetic says the second but it is wrong, verified live). 0-50 calls/s in play, ~3000 during world load. A full reload with this hooked survived. Attach only between loads anyway (coderpack switches it off around cObjectManager::load and terminateHero). The object is built inside, so read it on leave. Entry is `mov eax, fs:[0]`, the same 6-byte shape as AddGold's.
+0x005FC300  0x1FC300   cObjectManager::destroy            thiscall(mgr)(int ref, ...)              confirmed  [key=objDestroy hooked] 0-68 calls/s. Read the object on enter, it is gone on leave. Same switching as objCreate. Entry is `mov eax, fs:[0]`.
 0x00603260  0x203260   cObjectManager::load               thiscall                                 confirmed  [key=worldLoad hooked] Logs "%d objects (freeslot=%d)". Hook the ENTRY only; the body is the ~3000-object loop.
 0x00605DF0  0x205DF0   loadHero / hero (de)serialize      thiscall                                 confirmed  [key=heroLoad hooked] Runs on load AND on save, so report what changed, do not assume a direction.
 0x006075E0  0x2075E0   cObjectManager::terminateHero      thiscall                                 confirmed  [key=heroTerminate hooked] The point where hero pointers must be dropped.
