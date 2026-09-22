@@ -264,9 +264,9 @@
 ## ============================================================================
 # The world side is much less explored than the hero side.  What exists today:
 
-0x00493070  0x093070   cInterpretSQW::enterRegion         thiscall(int regionId)                   confirmed  Fires while walking; ids seen 1777..1999: map cells, not the named areas on the map screen.
-0x00493420  0x093420   cInterpretSQW::exitRegion          thiscall(int regionId)                   confirmed
-0x00493DD0  0x093DD0   cInterpretSQW::enterSector         thiscall(int x, int y)                   confirmed  Sectors seen: 56..58, 28..31.
+0x00493070  0x093070   cInterpretSQW::enterRegion         thiscall(int regionId, void* world)      confirmed  [key=regionEnter hooked] Fires while walking; ids seen 1777..1999: map cells, not the named areas on the map screen. args[0] is the id (read live); args[1] is an object the id is resolved against (`mov ecx, ebp / push esi / call 0x634C70`) and both are NULL-checked at the top. Entry is `sub esp, 0x118`, nothing branches into it. Only caller is enterSector (+0x93E07), so it fires once per sector crossing at most. Whether sectors are crossed by the hero alone is not measured yet.
+0x00493420  0x093420   cInterpretSQW::exitRegion          thiscall(int regionId, void* world)      confirmed  [key=regionExit hooked] Same two arguments as enterRegion, NULL-checked the same way. Entry is `sub esp, 0x210`. One caller, 0x004958A0.
+0x00493DD0  0x093DD0   cInterpretSQW::enterSector         thiscall(int x, int y, ...)              confirmed  [key=sectorEnter hooked] Sectors seen: 56..58, 28..31. this = the interpreter at 0x00AABF00 for the two calls from 0x004CFA70, which push a coordinate pair shifted right by 6. Third caller 0x006265A0. Calls enterRegion itself. Entry is the SEH prologue `push -1 / push imm32`.
 0x0062625B  0x22625B   showWorld: RainStart print site                                             confirmed  Hook point for "rain started".
 0x006263C7  0x2263C7   showWorld: RainStop print site                                              confirmed
 0x00625E27  0x225E27   showWorld: FogStart print site                                              confirmed
