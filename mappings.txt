@@ -79,6 +79,7 @@
 0x0059007B  0x19007B   combatArtStatsTooltip B                                                     confirmed  '%s: %.1fs\n%s: %d%%\n%s %+d\n%s: %ds'.
 0x00580E1B  0x180E1B   readCombatArtLevel                 movzx cx, [ebp + idx*22 + 6]             confirmed  EBP = the authoritative 22-byte-record array. Runs ~60x/s (cache refill), so read it here, do NOT hook it.
 0x00580E0F  0x180E0F   readCombatArtBonus                 mov al, [ebp + idx*22 + 7]               confirmed
+0x005822AB  0x1822AB   combat art rune invest write        mov [eax+6], bl                          confirmed  [key=artRaise hooked] EAX = the 22-byte record, BL = the new base level (already old + step), CL = the step. Found by watchpointing the authoritative array; one call per rune click, live. 3 bytes, so the patch also takes `or byte [eax+8], 1` (the dirty flag) and ends at the unconditional `jmp 0x5822E8`: nothing reads the flags afterwards and nothing branches into +0x1822AE. Mid-function, onEnter only. Rewriting BL (keeping the rest of EBX) changes what is stored. The step > 255 case returns earlier (+0x18229D) and never reaches here.
 0x00580E2D  0x180E2D   combat art cache refill                                                     confirmed  Writes the 16-byte display cache. This is what undoes a write to the cache.
 
 # --- journal / statistics ----------------------------------------------------
@@ -184,6 +185,8 @@
 +0x5A..E6  float[]  derived-stat block         confirmed  2-BYTE ALIGNED: a dword-aligned dump shows garbage.
 +0x66+4i   float    resistBase[i]              confirmed  i = physical, fire, magic, poison
 +0xD6+4i   float    resistMult[i]              confirmed  resistance[i] = round(resistBase[i] * resistMult[i]); the UI total is their sum.
++0x102     dword    combatArts.begin           confirmed  std::vector of 22-byte combat-art records, see below. Only the arts a character owns.
++0x106     dword    combatArts.end             confirmed
 +0x128     dword    currentHp mirror           confirmed
 +0x12C     dword    maxHp                      confirmed
 +0x130     dword    currentHp                  confirmed
@@ -255,9 +258,9 @@
 #          0x4B Poison Daemon     0x4C Energy Daemon    0x3E Call of Death
 #      (ids 0x44, 0x4D, 0x4E also appear in the array but not on the CA screen.)
 #
-#   Still open: the instruction that writes +0x06 when a rune is invested (the
-#   watchpoint above only caught the cache refill), and the array's owner --
-#   the base is a heap address, so a hook needs the code site, not this pointer.
+#   The array's owner is the sheet: [sheet+0x102] is the vector's begin and
+#   [sheet+0x106] its end (the rune path reads `mov ecx, [esi+0x102]`), and the
+#   rune write is +0x1822AB (row above).  Both were open questions here once.
 
 
 ## ============================================================================
