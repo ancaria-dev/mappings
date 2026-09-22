@@ -82,9 +82,10 @@
 0x00580E2D  0x180E2D   combat art cache refill                                                     confirmed  Writes the 16-byte display cache. This is what undoes a write to the cache.
 
 # --- journal / statistics ----------------------------------------------------
-0x004244A8  0x0244A8   opponentsDefeated write            mov [ebp+0x56F0], eax                    confirmed  EBP = cStats. EAX already incremented. Fires once per kill.
-0x004246D0  0x0246D0   incrementResurrections             thiscall(cStats)                         confirmed  Whole function; also zeroes +0x570C (survival-bonus timer). The reliable "player really died" signal.
-0x004249C0  0x0249C0   discoveredAreas++                  inc [ecx+0x56EC]                         confirmed
+0x00424250  0x024250   cStats::recordKill                 thiscall(cStats)(int victimType, ?, int, ... ~16 args)  static     Copies the previous "last kill" record (+0x30C8 -> +0x30A4, 0x87 dwords), stores the new one at +0x32C0.., bumps a per-type table at cStats + victimType*16 (count at +4, a running max of args[2] at +8) when victimType < 0x300, then the opponents-defeated counter below. Two callers, +0x134E6C and +0x1368D5. args[0] is also compared with 0x47 right after the counter.
+0x004244A8  0x0244A8   opponentsDefeated write            mov [ebp+0x56F0], eax                    confirmed  [key=killCount hooked] EBP = cStats. EAX already incremented. Fires once per kill. Inside recordKill: EBX still holds its args[0] (the victim type, loaded at +0x2425B and only compared since), and [esp+0x2C] its args[2], the value kept as a per-type maximum (the victim's level? UNVERIFIED). `je 0x4244AE` at +0x2444A5 lands exactly past the 6-byte patch, not inside it.
+0x004246D0  0x0246D0   incrementResurrections             thiscall(cStats)                         confirmed  [key=resurrect hooked] Whole function; also zeroes +0x570C (survival-bonus timer). The reliable "player really died" signal. Entry is `mov eax, [ecx+0x56F4]`, 6 bytes; its only branch lands at +0x246EE.
+0x004249C0  0x0249C0   discoveredAreas++                  thiscall(cStats)                         confirmed  [key=discover hooked] The whole function is `inc [ecx+0x56EC] / ret`, so the hook is an entry and ECX is cStats.
 0x00424C10  0x024C10   getPlayingTime                     thiscall(cStats)(int* h, int* m, int* s) confirmed  Reads +0x56F8 / +0x56FC / (+0x5700 / 1000).
 0x004249D0  0x0249D0   getWorldDiscovered                 thiscall(cStats)(int) -> float           static     +0x56EC / total.
 0x00424650  0x024650   getSecondsSinceDeath               thiscall(cStats) -> int                  confirmed  +0x570C / 1000.
