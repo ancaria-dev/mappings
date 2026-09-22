@@ -35,8 +35,8 @@
 # VA          RVA        NAME                              CONV/ARGS -> RET                        CONF       NOTES
 
 0x00604380  0x204380   cObjectManager::getLocalHero      thiscall() -> cCreatureHero*             confirmed  [key=getLocalHero hooked] NULL on the main menu. The hero-capture point for every hook.
-0x007D7F30  0x3D7F30   getGameState                      cdecl() -> cGameState*                   confirmed  Lazily creates the singleton at global 0x0182DB68. [gs+0x14] = player id.
-0x00425290  0x025290   getPlayerStats                    cdecl(int playerId) -> cStats*           confirmed  Journal/statistics block. Returned 0x00AA4518 (static) in single player.
+0x007D7F30  0x3D7F30   getGameState                      cdecl() -> cGameState*                   confirmed  [key=getGameState] Lazily creates the singleton at global 0x0182DB68. [gs+0x14] = player id.
+0x00425290  0x025290   getPlayerStats                    cdecl(int playerId) -> cStats*           confirmed  [key=getPlayerStats] Journal/statistics block. Returned 0x00AA4518 (static) in single player.
 0x005FE550  0x1FE550   cObjectManager::objectByIndex     thiscall(int) -> cObject*                confirmed  Used by combat code and by pickupItem to resolve a ref. `test esi,esi / je` at the top: ref 0 returns NULL, and so does any ref past [mgr+8]-[mgr+4] >> 2. Coderpack reimplements the lookup in JS (pure reads) rather than calling it: the mismatch branch at 0x005FE577 WRITES [obj+0xC].
 
 # --- combat / health ---------------------------------------------------------
@@ -94,15 +94,15 @@
 0x00424C50  0x024C50   setResurrections                   thiscall(cStats)(int)                    confirmed  Same caveat.
 
 # --- derived stats (character sheet) ----------------------------------------
-0x00564500  0x164500   getArmorBonusPercent               thiscall(sheet) -> int                   confirmed  Matched the UI exactly (430).
+0x00564500  0x164500   getArmorBonusPercent               thiscall(sheet) -> int                   confirmed  [key=armorPercent] Matched the UI exactly (430).
 0x00564550  0x164550   getPercentStat2                    thiscall(sheet) -> int                   suspect    Returned 563; the row it feeds is not identified yet.
 0x005641D0  0x1641D0   getResistMinMax                    thiscall(sheet)(float* min, float* max)  confirmed  min/max over sheet[0x66+4i] * sheet[0xD6+4i].
 0x00564280  0x164280   getDamageType0                     thiscall(sheet)(float* a, float* b)      static     Four back-to-back calls at +0x2AB700..74B.
 0x00564320  0x164320   getDamageType1                     thiscall(sheet)(float* a, float* b)      static
 0x005643C0  0x1643C0   getDamageType2                     thiscall(sheet)(float* a, float* b)      static
 0x00564460  0x164460   getDamageType3                     thiscall(sheet)(float* a, float* b)      static
-0x00585290  0x185290   getAttackSpeed                     thiscall(sheet) -> int                   confirmed  Matched the UI (220). Base at sheet+0x3C.
-0x00566020  0x166020   survivalCurve                      cdecl(float lo, float x, float span,     confirmed  = 100 * (1 - 1/(1 + (x-1)/span)) with lo=0, hi=50.
+0x00585290  0x185290   getAttackSpeed                     thiscall(sheet) -> int                   confirmed  [key=attackSpeed] Matched the UI (220). Base at sheet+0x3C.
+0x00566020  0x166020   survivalCurve                      cdecl(float lo, float x, float span,     confirmed  [key=survivalCurve] = 100 * (1 - 1/(1 + (x-1)/span)) with lo=0, hi=50.
 #                                                                float hi) -> float                           Called as (0.0, minutesSinceDeath, 120.0, 50.0).
 0x00424000  0x024000   toHitPercent?                      cdecl(4 args) -> float                   suspect    Feeds the "To Hit 97%" row.
 0x005CDC40  0x1CDC40   getWeaponDamageRange               thiscall(...)(out args)                  suspect    "Weapon 875-1153".
