@@ -19,7 +19,7 @@ usually records a crash or an unsafe instruction boundary, not a suggestion.
 | `mappings.json` | Tracked generated data read by other repositories |
 | `mappings.generator.py` | Python 3.11 or newer generator and validator, using only the standard library |
 
-The generated file currently contains 40 RVAs, 3 VAs, and 29 hooked sites.
+The generated file currently contains 52 RVAs, 4 VAs, and 38 hooked sites.
 Keep `mappings.json` correct in the checkout because consumers may read it
 without first running the generator.
 
