@@ -43,11 +43,14 @@
     "posScale": "0x491044",
     "regionEnter": "0x93070",
     "regionExit": "0x93420",
-    "sectorEnter": "0x93DD0"
+    "sectorEnter": "0x93DD0",
+    "questStart": "0x8F410",
+    "questEnd": "0x6CFC0"
   },
   "va": {
     "xorMirror1": "0x182DDDC",
     "xorMirror2": "0x182DDE0",
+    "questTable": "0xAAAE98",
     "objectManager": "0xAD4BC0"
   },
   "hooked": [
@@ -82,7 +85,9 @@
     "posCamera",
     "regionEnter",
     "regionExit",
-    "sectorEnter"
+    "sectorEnter",
+    "questStart",
+    "questEnd"
   ],
   "_hooked": "Addresses the agent attaches to, as opposed to calls or reads. Coderpack's tools/hooksafe.py checks each one for branches landing inside the bytes Frida's trampoline overwrites."
 }
