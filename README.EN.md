@@ -10,27 +10,40 @@
 
 # mappings
 
-This repository records what has been mapped inside one build of Sacred Gold:
-`pureHD.exe` v2.0.2.118, 32-bit, with image base `0x00400000`. `pureHD.exe` is a
-community wrapper that ships with `pHD.dll`. The stock `Sacred.exe` is a
-different binary. Every address here is specific to the stated `pureHD.exe`
-build.
+The address registry for Sacred Gold, for anyone who adds a hook to the loader
+or studies the game's code.
 
-The registry covers function addresses, calling conventions, structure offsets,
-globals, and the evidence behind each claim. Keeping it separate lets consumers
-change without disturbing the research that produced the mappings.
+Each row names a function, global, or structure field, gives its address and
+calling convention, and states how certain it is. The notes keep the
+evidence, the limits, and every failed hook site, so nobody has to crash the
+game twice for the same reason.
+
+Every address targets one build: the 32-bit `pureHD.exe` v2.0.2.118 with image
+base `0x00400000`. It's a community wrapper that ships with `pHD.dll`. The
+stock `Sacred.exe` is a different binary, and these addresses are wrong for it
+and for any other build.
+
+I found the addresses with Frida, Cheat Engine, and Ghidra on a locally owned,
+offline copy. The loader never patches game files on disk. Its hooks live in
+memory and disappear when the game closes.
 
 | File | What it is |
 |---|---|
-| `mappings.txt` | The registry and the only file a person edits |
+| `mappings.txt` | The registry, and the only file you edit by hand |
 | `mappings.json` | Generated from the registry and read by the other repositories |
 | `mappings.generator.py` | Builds and validates `mappings.json` |
 
-## Adding a row
+## Getting started
 
-Add the row to the appropriate section of `mappings.txt`. The columns are
-aligned for people, while the generator reads the first two
-whitespace-separated fields:
+To add a row:
+
+1. Open `mappings.txt` and find the matching section.
+2. Add the row. The columns are aligned for people. The generator reads only
+   the first two fields, split on whitespace.
+3. Run `python mappings.generator.py`.
+4. Commit `mappings.txt` and `mappings.json` together.
+
+Each section has its own header row:
 
 ```
 # VA          RVA        NAME                              CONV/ARGS -> RET                        CONF       NOTES
@@ -38,86 +51,49 @@ whitespace-separated fields:
 0x00604380  0x204380   cObjectManager::getLocalHero      thiscall() -> cCreatureHero*             confirmed  [key=getLocalHero hooked] NULL on the main menu. The hero-capture point for every hook.
 ```
 
-Code rows carry both addresses. RVA is VA minus `0x00400000`. Frida uses the RVA,
-while Ghidra and Cheat Engine use the VA. Mixing them up does not throw an error.
-The hook simply never fires.
+Code rows carry both addresses, and the RVA equals the VA minus `0x00400000`.
+Frida uses the RVA, Ghidra and Cheat Engine use the VA. Mix them up and
+nothing throws. The hook just never fires.
 
 Globals carry only a VA. Rows in `STRUCTURES` start with `+0x` and describe
 offsets, not addresses.
 
-`CONF` accepts exactly three values:
+`CONF` takes exactly three values:
 
-- `confirmed` means the behavior or value was observed in the running game.
-- `static` means it was read from the disassembly but has not been observed at
-  runtime.
-- `suspect` means it is plausible but untested, or contradicted by other
-  evidence.
+- `confirmed`: observed in the running game.
+- `static`: read from the disassembly, not yet observed at runtime.
+- `suspect`: plausible but untested, or contradicted by other evidence.
 
-Do not leave a row at `confirmed` without runtime evidence. A bad address can
-produce a hook that silently never fires, so lower the confidence to `suspect`
-and explain why when the evidence no longer holds.
+A wrong row costs more than a missing one. Don't keep a row at `confirmed`
+without runtime evidence. When the evidence stops holding, lower it to
+`suspect` and say why in the notes.
 
-Notes carry the evidence, limitations, and failure history. Some rows exist to
-record unsafe hook sites:
+Some rows exist only to warn about an unsafe site:
 
 ```
 0x00562D10  0x162D10   regen write                        mov [ebp+0x130], edi                     confirmed  DO NOT HOOK: per creature per tick (~10/s for the player alone).
 ```
 
-Do not delete a row. Correct it, or change its `CONF` to `suspect`, and record the
-reason in the notes.
+Never delete a row. Correct it or mark it `suspect`, and keep the reason in
+the notes. Never edit `mappings.json` by hand either: the next generator run
+overwrites it.
 
-### When code needs the row by name
+### When code needs a row by name
 
 Put an export tag at the start of the notes column:
 
 - `[key=addExperience]` exports the address as `rva.addExperience`, or as
-  `va.addExperience` if the row is a global with a single address.
-- `[key=hpDamage hooked]` exports the address and adds the name to `hooked`. The
-  agent attaches an interceptor there, so `hooksafe.py` must check the site.
+  `va.addExperience` for a global with a single address.
+- `[key=hpDamage hooked]` also adds the name to `hooked`. The agent attaches
+  an interceptor there, so `hooksafe.py` must check the site.
 
-An untagged row remains documentation and does not reach `mappings.json`. Keys
-are unique across the file. If two rows describe the same address, only one may
-carry a key.
+An untagged row stays documentation and never reaches `mappings.json`. Keys
+are unique across the file. If two rows describe the same address, only one of
+them may carry a key.
 
-Regenerate after editing the registry, then keep both files in the same change:
+## The mappings.json format
 
-```
-python mappings.generator.py
-```
-
-Never hand-edit `mappings.json`. The next run overwrites it.
-
-## The generator
-
-The generator uses the Python standard library and requires Python 3.11 or
-newer.
-
-```
-python mappings.generator.py            # writes mappings.json
-python mappings.generator.py --check    # exits 1 if the file on disk is stale
-```
-
-`--check` builds the JSON in memory and compares it with the tracked file. It
-writes nothing. When they match, it prints `mappings.json is up to date.` and
-exits 0. When they differ, it prints the regeneration command and exits 1. This
-repository has no CI workflow, so run the check manually before committing.
-
-Both modes validate the registry as they read it. The generator rejects
-malformed address hex, malformed RVA hex when the second field starts with
-`0x`, an RVA that is not `VA - 0x00400000`, `[key=...]` on a non-address row, a
-malformed tag body, a duplicate key, bare `[hooked]`, `hooked` on a
-single-address global, and a file with no exported RVA. Line-specific failures
-include the line number. Duplicate-key errors also name the first line that
-used the key.
-
-Parsing begins at the first line that starts with `##`. The header above it uses
-tag examples and is intentionally skipped. An address row placed above that
-marker is skipped too. A two-address row must put the RVA in the second field.
-Otherwise the generator treats it as a single-address global and exports the VA
-under `va`. Structure offsets start with `+0x`, so they cannot carry export tags.
-
-The generated data has three working sections, plus the explanatory fields `_`
+`mappings.json` has three working sections, plus the explanatory fields `_`
 and `_hooked`:
 
 ```json
@@ -128,48 +104,78 @@ and `_hooked`:
 }
 ```
 
-Two-address rows go into `rva`. Single-address globals go into `va`. `hooked`
-contains the exported names of interceptor sites. The generator computes an
-exported RVA from the VA after checking the RVA written in the row.
+Two-address rows go into `rva`, single-address globals into `va`. `hooked`
+lists the interceptor sites. The generator checks the RVA written in the row,
+then computes the exported RVA from the VA.
 
 ## Who reads it
 
-Coderpack locates `mappings.json` through `coderpack/tools/paths.py`. The lookup
-order is a command-line path, `$CODERPACK_MAPPINGS`, the sibling
-`../mappings`, the cache at `build/mappings/mappings.json`, then a download from
-the mappings repository on GitHub. The download uses the ref in
-`coderpack/.mappings-ref`, or `master` when that file is absent or empty.
+`coderpack/tools/paths.py` finds `mappings.json` in this order: a command-line
+path, `$CODERPACK_MAPPINGS`, the sibling `../mappings`, the cache at
+`build/mappings/mappings.json`, and finally a download from GitHub. The
+download uses the ref in `coderpack/.mappings-ref`, or `master` when that file
+is missing or empty.
 
-`coderpack/tools/addr.py` generates `coderpack/agent/src/gen/addr.js` from `rva`
-and `va`. A hand-written address in agent code is a bug.
+`coderpack/tools/addr.py` turns `rva` and `va` into
+`coderpack/agent/src/gen/addr.js`. An address typed by hand into agent code is
+a bug.
 
-`coderpack/tools/hooksafe.py` reads every name in `hooked`, disassembles the game
-binary, and reports trampoline hazards. A branch landing inside patched bytes,
-a flags-producing instruction split from its branch, or overlapping hook sites
-is fatal. The tool also warns about relocated control flow, ESP-relative
-instructions, and scratch registers carried across a patch.
+`coderpack/tools/hooksafe.py` disassembles the game at every name in `hooked`
+and reports trampoline hazards. A branch into the patched bytes, a
+flag-setting instruction cut off from its branch, and overlapping hooks are
+fatal. It also warns about relocated control flow, ESP-relative instructions,
+and scratch registers that must survive the patch.
 
-The skill write at `+0x1827DA` showed why the branch-target check matters. Its
-four-byte instruction leaves the next instruction inside the patch area, and
-two jumps target that next instruction. Hooking it crashed the game when a
-character with an empty skill slot loaded. The safe site is `+0x1827DE`.
-Diagnosing it by hand took three game restarts.
+The skill write at `+0x1827DA` shows why the branch check matters. Its
+four-byte instruction leaves the next one inside the patch, and two jumps land
+on that next instruction. Hooking it crashed the game whenever a character
+with an empty skill slot loaded. It took three game restarts to find by hand.
+The safe site is `+0x1827DE`.
 
-`launcher/tools/build.ps1` regenerates `agent/src/gen/addr.js` while staging a
-Coderpack source checkout. It passes `$Mappings` when that path contains
-`mappings.json`. Otherwise it calls `python tools/addr.py` without a path and
-lets Coderpack use its normal lookup chain.
+`launcher/tools/build.ps1` regenerates `addr.js` while it stages a coderpack
+source build. It passes `$Mappings` only when that path holds
+`mappings.json`. Otherwise coderpack falls back to its usual lookup order.
 
-The addresses were found with Frida, Cheat Engine and Ghidra against a locally
-owned, offline copy. Nothing on disk in the game is ever patched. Everything the
-hooks do happens in memory and is gone the moment the process exits.
+## Building
+
+The generator needs Python 3.11 or newer and nothing beyond the standard
+library:
+
+```
+python mappings.generator.py            # writes mappings.json
+python mappings.generator.py --check    # exits 1 if the file on disk is stale
+```
+
+`--check` builds the JSON in memory, compares it with the tracked file, and
+writes nothing. On a match it prints `mappings.json is up to date.` and exits
+0. Otherwise it prints the regeneration command and exits 1. CI runs the same
+check on every push and pull request.
+
+Both modes validate the registry. The generator rejects:
+
+- a malformed VA, or a malformed second field that starts with `0x`
+- an RVA that isn't `VA - 0x00400000`
+- `[key=...]` on a line that isn't an address row
+- a malformed tag body
+- a duplicate key, naming the line that used it first
+- a bare `[hooked]`
+- `hooked` on a single-address global
+- a registry with no exported RVA
+
+Errors tied to a line include its number.
+
+Parsing starts at the first line that begins with `##`. The header above it
+holds tag examples and is skipped on purpose, and so is any address row placed
+there. A two-address row must keep the RVA in the second field. Otherwise the
+generator reads it as a single-address global and exports the VA under `va`.
+
+## Releases
+
+The registry has no releases. Consumers read `mappings.json` from `master` or
+from the ref pinned in `coderpack/.mappings-ref`. A change reaches players
+through the next coderpack release, as described in the root
+[CONTRIBUTING](https://github.com/ancaria-dev/.github/blob/master/CONTRIBUTING.EN.md).
 
 ## License
 
-MIT. The text is in [LICENSE](LICENSE).
-
----
-
-This started as a proof of concept and comes with no promise of support. The
-point of it was to find out whether a Java mod for a favourite old game was
-possible at all.
+MIT, see [LICENSE](LICENSE).

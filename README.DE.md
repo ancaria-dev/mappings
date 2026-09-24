@@ -10,31 +10,41 @@
 
 # mappings
 
-Dieses Repository verzeichnet, was über das Innere von Sacred Gold bekannt ist:
-Adressen von Funktionen, Aufrufkonventionen, Felder an Struktur-Offsets und den
-jeweiligen Stand der Verifizierung.
+Das Adressregister von Sacred Gold für alle, die dem Loader einen Hook
+hinzufügen oder den Code des Spiels untersuchen.
 
-Alle Angaben gelten ausschließlich für `pureHD.exe` v2.0.2.118, 32 Bit, mit der
-Image Base `0x00400000`. Diese Binärdatei ist ein Community-Wrapper, der
-`pHD.dll` mitbringt. Die originale `Sacred.exe` ist eine andere Binärdatei. Für
-jeden anderen Build sind die Adressen falsch.
+Jede Zeile benennt eine Funktion, eine globale Variable oder ein Strukturfeld,
+nennt Adresse und Aufrufkonvention und sagt, wie sicher die Angabe ist. Die
+Notizen halten Belege, Grenzen und jede gescheiterte Hook-Stelle fest. So muss
+niemand das Spiel zweimal aus demselben Grund abstürzen lassen.
 
-Das Adressregister liegt in einem eigenen Repository. Dadurch kann sich der
-verbrauchende Code ändern, ohne dass die Arbeit zur Ermittlung der Adressen
-verloren geht.
+Alle Adressen gelten für genau einen Build: die 32-Bit-`pureHD.exe` v2.0.2.118
+mit Image Base `0x00400000`. Das ist ein Community-Wrapper, der `pHD.dll`
+mitbringt. Die originale `Sacred.exe` ist eine andere Binärdatei, und für sie
+wie für jeden anderen Build sind diese Adressen falsch.
 
-| Datei | Zweck |
+Ich habe die Adressen mit Frida, Cheat Engine und Ghidra an meiner eigenen
+Offline-Kopie gefunden. Der Loader ändert keine Spieldateien auf der
+Festplatte. Seine Hooks leben nur im Arbeitsspeicher und verschwinden mit dem
+Spielprozess.
+
+| Datei | Was sie ist |
 |---|---|
-| `mappings.txt` | Das von Hand gepflegte Adressregister |
-| `mappings.json` | Die daraus erzeugte Datei, die andere Repositories einlesen |
-| `mappings.generator.py` | Der Generator und Validator für `mappings.json` |
+| `mappings.txt` | Das Register und die einzige Datei, die du von Hand bearbeitest |
+| `mappings.json` | Wird aus dem Register erzeugt und von den anderen Repositories gelesen |
+| `mappings.generator.py` | Erzeugt und prüft `mappings.json` |
 
-## Zeile hinzufügen
+## Erste Schritte
 
-Öffne `mappings.txt`, suche den passenden Abschnitt und füge dort eine Zeile
-hinzu. Die Spalten sind zur besseren Lesbarkeit ausgerichtet. Für die Auswertung
-trennt der Generator die ersten beiden Felder anhand von Leerraum. Jeder
-Abschnitt hat eine eigene Kopfzeile:
+So fügst du eine Zeile hinzu:
+
+1. Öffne `mappings.txt` und such den passenden Abschnitt.
+2. Füg die Zeile ein. Die Spalten sind für Menschen ausgerichtet. Der Generator
+   liest nur die ersten beiden durch Leerraum getrennten Felder.
+3. Führ `python mappings.generator.py` aus.
+4. Committe `mappings.txt` und `mappings.json` gemeinsam.
+
+Jeder Abschnitt hat eine eigene Kopfzeile:
 
 ```
 # VA          RVA        NAME                              CONV/ARGS -> RET                        CONF       NOTES
@@ -42,89 +52,49 @@ Abschnitt hat eine eigene Kopfzeile:
 0x00604380  0x204380   cObjectManager::getLocalHero      thiscall() -> cCreatureHero*             confirmed  [key=getLocalHero hooked] NULL on the main menu. The hero-capture point for every hook.
 ```
 
-Codezeilen enthalten beide Adressen. Die RVA ist die VA minus `0x00400000`.
-Frida verwendet die RVA, Ghidra und Cheat Engine verwenden die VA. Eine
-Verwechslung löst keinen Fehler aus. Der Hook feuert dann einfach nie.
+Code-Zeilen tragen beide Adressen, und die RVA ist die VA minus `0x00400000`.
+Frida arbeitet mit der RVA, Ghidra und Cheat Engine mit der VA. Verwechselst du
+sie, gibt es keinen Fehler. Der Hook feuert einfach nie.
 
-Für `CONF` sind genau drei Werte zulässig:
+Globale Variablen tragen nur eine VA. Zeilen in `STRUCTURES` beginnen mit `+0x`
+und beschreiben Offsets, keine Adressen.
 
-- `confirmed`: im laufenden Spiel beobachtet
-- `static`: aus dem Disassembly abgelesen, aber nicht zur Laufzeit beobachtet
-- `suspect`: plausibel, aber ungetestet, oder durch andere Erkenntnisse
-  widerlegt
+`CONF` kennt genau drei Werte:
 
-Eine falsche Zeile verursacht mehr Arbeit als eine fehlende. Wenn die Belege
-nicht für `confirmed` reichen, bleibt sie `static` oder `suspect`. Die
-Notizspalte hält die Begründung fest. Manche Zeilen dienen ausschließlich als
-Warnung vor ungeeigneten Hook-Stellen:
+- `confirmed`: im laufenden Spiel beobachtet.
+- `static`: aus dem Disassembly gelesen, zur Laufzeit noch nicht beobachtet.
+- `suspect`: plausibel, aber ungeprüft oder im Widerspruch zu anderen Belegen.
+
+Eine falsche Zeile kostet mehr als eine fehlende. Lass keine Zeile ohne Beleg
+aus dem laufenden Spiel auf `confirmed`. Hält ein Beleg nicht mehr, stuf die
+Zeile auf `suspect` herab und schreib den Grund in die Notizen.
+
+Manche Zeilen gibt es nur, um vor einer gefährlichen Stelle zu warnen:
 
 ```
 0x00562D10  0x162D10   regen write                        mov [ebp+0x130], edi                     confirmed  DO NOT HOOK: per creature per tick (~10/s for the player alone).
 ```
 
-Zeilen werden nicht gelöscht. Korrigiere eine falsche Zeile oder setze ihren
-`CONF`-Wert auf `suspect` und dokumentiere den Grund in den Notizen.
+Lösch nie eine Zeile. Korrigier sie oder markier sie als `suspect` und halt
+den Grund in den Notizen fest. Auch `mappings.json` bearbeitest du nie von
+Hand: Der nächste Generatorlauf überschreibt die Datei.
 
-### Benannte Exporte
+### Wenn Code eine Zeile beim Namen braucht
 
-Soll Code eine Zeile über einen Namen verwenden, erhält sie ein Export-Tag.
-Nach der Konvention des Registers steht dieses Tag am Anfang der Notizspalte:
+Setz einen Export-Tag an den Anfang der Notizspalte:
 
-- `[key=addExperience]` exportiert die Adresse als `rva.addExperience`, oder als
-  `va.addExperience`, wenn es sich um ein Global mit nur einer Adresse handelt.
-- `[key=hpDamage hooked]` exportiert die Adresse ebenfalls und nimmt den Namen
-  zusätzlich in `hooked` auf. Der Agent hängt an dieser Stelle einen
-  Interceptor ein. `tools/hooksafe.py` prüft sie deshalb auf Gefahren für das
-  Trampolin.
+- `[key=addExperience]` exportiert die Adresse als `rva.addExperience`, bei
+  einer globalen Variable mit nur einer Adresse als `va.addExperience`.
+- `[key=hpDamage hooked]` trägt den Namen zusätzlich in `hooked` ein. Der Agent
+  setzt dort einen Interceptor, also muss `hooksafe.py` die Stelle prüfen.
 
-Zeilen ohne Tag bleiben reine Dokumentation und gelangen nicht in
-`mappings.json`. Schlüssel müssen in der gesamten Datei eindeutig sein. Zwei
-Zeilen mit derselben Adresse dürfen zusammen höchstens einen Schlüssel tragen.
-Ein Global mit nur einer Adresse darf nicht als `hooked` markiert werden, da es
-dort keinen Code zum Einhängen gibt.
+Eine Zeile ohne Tag bleibt Dokumentation und landet nie in `mappings.json`.
+Schlüssel sind in der ganzen Datei eindeutig. Beschreiben zwei Zeilen dieselbe
+Adresse, darf nur eine davon einen Schlüssel tragen.
 
-Erzeuge anschließend die JSON-Datei neu und committe beide Dateien gemeinsam:
+## Aufbau von mappings.json
 
-```
-python mappings.generator.py
-```
-
-Bearbeite `mappings.json` nie von Hand. Der nächste Generatorlauf überschreibt
-solche Änderungen.
-
-## Generator
-
-Der Generator benötigt nur die Python-Standardbibliothek und läuft mit Python
-3.11 oder neuer.
-
-```
-python mappings.generator.py            # writes mappings.json
-python mappings.generator.py --check    # exits 1 if the file on disk is stale
-```
-
-Mit `--check` erzeugt der Generator den erwarteten Inhalt im Speicher und
-vergleicht ihn mit `mappings.json`. Der Befehl schreibt nichts. Bei einer
-veralteten oder fehlenden Datei endet er mit Exit-Code 1, andernfalls gibt er
-`mappings.json is up to date.` aus und endet mit Exit-Code 0. Dieses Repository
-hat keinen CI-Workflow, daher muss die Prüfung hier manuell ausgeführt werden.
-
-Beide Modi validieren das Register beim Einlesen. Der Lauf bricht mit einer
-Zeilennummer ab, wenn eine Adresse fehlerhaft formatiert ist, ein mit `0x`
-beginnendes zweites Feld keine gültige RVA enthält, die RVA nicht
-`VA - 0x00400000` entspricht, ein `[key=...]` auf einer Zeile ohne Adresse
-steht, ein Tag ungültig aufgebaut ist, ein Schlüssel doppelt vorkommt, ein
-nacktes `[hooked]` verwendet wird oder ein Global als `hooked` markiert ist.
-Auch ein beschädigtes Register ohne exportierte RVA wird abgelehnt.
-
-Die Auswertung beginnt mit der ersten Zeile, die mit `##` anfängt. Der Kopf
-davor enthält Beispiele für Tags und wird bewusst übersprungen. Eine
-Adresszeile oberhalb dieser Markierung wird ebenfalls nicht gelesen. Bei einer
-Zeile mit zwei Adressen muss die RVA im zweiten Feld stehen. Andernfalls
-behandelt der Generator die Zeile als Global und exportiert ihre VA nach `va`.
-Struktur-Offsets beginnen mit `+0x` und dürfen kein Export-Tag tragen.
-
-Die funktionalen Daten der flachen Ausgabe bestehen aus `rva`, `va` und
-`hooked`. Zusätzlich enthält die Datei die erläuternden Felder `_` und
+Die Datei hat drei Arbeitsabschnitte und die erklärenden Felder `_` und
 `_hooked`:
 
 ```json
@@ -135,52 +105,82 @@ Die funktionalen Daten der flachen Ausgabe bestehen aus `rva`, `va` und
 }
 ```
 
-Bei Zeilen mit zwei Adressen berechnet der Generator den exportierten RVA-Wert
-aus der VA, nachdem er die RVA in der Zeile geprüft hat. Globals mit einer
-Adresse landen in `va`. `hooked` ist eine Liste der Namen, deren Tag das Wort
-`hooked` enthält.
+Zeilen mit zwei Adressen landen in `rva`, globale Variablen mit einer Adresse
+in `va`. `hooked` listet die Interceptor-Stellen. Der Generator prüft die RVA
+aus der Zeile und berechnet den exportierten Wert dann aus der VA.
 
-## Verwendung
+## Wer das Register liest
 
-`coderpack/tools/paths.py` sucht `mappings.json` in einer festen Reihenfolge.
-Zuerst kommt ein Pfad aus der Kommandozeile, dann `$CODERPACK_MAPPINGS`, das
-benachbarte Verzeichnis `../mappings` und der Cache unter
-`build/mappings/mappings.json`. Fehlt die Datei weiterhin, lädt das Werkzeug sie
-aus dem mappings-Repository auf GitHub. Dabei verwendet es den Ref aus
-`coderpack/.mappings-ref` oder `master`, wenn diese Datei fehlt oder leer ist.
+`coderpack/tools/paths.py` sucht `mappings.json` in dieser Reihenfolge: ein Pfad
+auf der Kommandozeile, `$CODERPACK_MAPPINGS`, das Nachbarverzeichnis
+`../mappings`, der Cache unter `build/mappings/mappings.json` und zuletzt ein
+Download von GitHub. Der Download nimmt die Revision aus
+`coderpack/.mappings-ref`, oder `master`, wenn die Datei fehlt oder leer ist.
 
-`tools/addr.py` erzeugt `agent/src/gen/addr.js` aus `rva` und `va`. Eine von Hand
-in den Agent-Code eingetragene Adresse gilt als Fehler.
+`coderpack/tools/addr.py` macht aus `rva` und `va` die Datei
+`coderpack/agent/src/gen/addr.js`. Eine von Hand in den Agenten geschriebene
+Adresse ist ein Fehler.
 
-`tools/hooksafe.py` liest alle Namen aus `hooked`, disassembliert die Binärdatei
-des Spiels und meldet Gefahren für das Trampolin. Ein Sprungziel innerhalb der
-ersetzten Bytes, eine von ihrem Branch getrennte Flag-Instruktion oder zwei
-überlappende Hooks gelten als fatal. Das Werkzeug warnt außerdem vor verlegtem
-Kontrollfluss, ESP-relativen Instruktionen und temporären Registern, deren Wert
-den Patch überdauern muss.
+`coderpack/tools/hooksafe.py` disassembliert das Spiel an jedem Namen aus
+`hooked` und meldet Gefahren für das Trampolin. Tödlich sind ein Sprung in die
+überschriebenen Bytes, eine Flags setzende Instruktion, die von ihrem Sprung
+getrennt wird, und überlappende Hooks. Außerdem warnt das Werkzeug vor
+verschobenem Kontrollfluss, ESP-relativen Instruktionen und Hilfsregistern,
+die den Patch überleben müssen.
 
-Beim Skill-Write auf `+0x1827DA` ist die Instruktion vier Byte lang. Zwei `jmp`
-zielen auf die direkt folgende Instruktion, die damit im Patch-Bereich liegt.
-Beim Laden eines Charakters mit einem leeren Skill-Slot stürzte das Spiel ab.
-Die sichere Stelle liegt bei `+0x1827DE`. Die Ursache ließ sich erst nach drei
-Neustarts von Hand eingrenzen.
+Der Skill-Schreibzugriff bei `+0x1827DA` zeigt, warum die Sprungprüfung zählt.
+Seine Instruktion ist vier Byte lang, die nächste liegt also im Patch, und zwei
+Sprünge zielen genau darauf. Der Hook dort ließ das Spiel abstürzen, sobald ein
+Charakter mit leerem Skill-Slot geladen wurde. Von Hand hat die Suche drei
+Neustarts des Spiels gekostet. Die sichere Stelle ist `+0x1827DE`.
 
-`launcher/tools/build.ps1` erzeugt `agent/src/gen/addr.js` neu, wenn es
-Coderpack aus den Quellen baut und das Payload vorbereitet. Enthält der Pfad
-`$Mappings` eine `mappings.json`, übergibt das Skript ihn an
-`python tools/addr.py`. Sonst ruft es den Befehl ohne Pfad auf und Coderpack
-verwendet seine normale Suchkette.
+`launcher/tools/build.ps1` erzeugt `addr.js` neu, wenn es coderpack aus den
+Quellen baut. `$Mappings` reicht es nur weiter, wenn dort `mappings.json`
+liegt. Sonst sucht coderpack das Register auf dem üblichen Weg.
 
-Die Adressen wurden mit Frida, Cheat Engine und Ghidra anhand einer lokal
-besessenen Offline-Kopie ermittelt. Dabei wird keine Spieldatei auf dem
-Datenträger gepatcht. Alle Änderungen der Hooks finden im Arbeitsspeicher statt
-und verschwinden mit dem Ende des Prozesses.
+## Bauen
+
+Der Generator braucht Python 3.11 oder neuer und nichts außer der
+Standardbibliothek:
+
+```
+python mappings.generator.py            # schreibt mappings.json
+python mappings.generator.py --check    # endet mit 1, wenn die Datei veraltet ist
+```
+
+`--check` baut das JSON im Speicher, vergleicht es mit der eingecheckten Datei
+und schreibt nichts. Stimmen beide überein, gibt es
+`mappings.json is up to date.` aus und endet mit 0. Sonst gibt es den Befehl zum
+Neuerzeugen aus und endet mit 1. Die CI führt dieselbe Prüfung bei jedem Push
+und Pull Request aus.
+
+In beiden Modi prüft der Generator das Register und lehnt ab:
+
+- eine fehlerhafte VA oder ein fehlerhaftes zweites Feld, das mit `0x` beginnt
+- eine RVA, die nicht `VA - 0x00400000` ist
+- `[key=...]` in einer Zeile ohne Adresse
+- einen fehlerhaften Tag-Inhalt
+- einen doppelten Schlüssel, samt der Zeile, in der er zuerst vorkam
+- ein alleinstehendes `[hooked]`
+- `hooked` bei einer globalen Variable mit einer Adresse
+- ein Register ohne exportierte RVA
+
+Fehler zu einer bestimmten Zeile nennen ihre Nummer.
+
+Das Parsen beginnt bei der ersten Zeile, die mit `##` anfängt. Der Kopf darüber
+enthält Tag-Beispiele und wird absichtlich übersprungen, genau wie jede
+Adresszeile dort. In einer Zeile mit zwei Adressen muss die RVA im zweiten Feld
+stehen. Sonst hält der Generator sie für eine globale Variable und exportiert
+die VA unter `va`.
+
+## Releases
+
+Das Register hat keine Releases. Die Nutzer lesen `mappings.json` von `master`
+oder von der Revision, die in `coderpack/.mappings-ref` festgelegt ist. Bei den
+Spielern kommt eine Änderung mit dem nächsten coderpack-Release an, wie in der
+[CONTRIBUTING](https://github.com/ancaria-dev/.github/blob/master/CONTRIBUTING.DE.md)
+im Wurzel-Repository beschrieben.
 
 ## Lizenz
 
-Die Lizenz ist MIT. Der vollständige Text steht in [LICENSE](LICENSE).
-
----
-
-Das Projekt begann als Proof of Concept für die Frage, ob ein Java-Mod für ein
-altes Lieblingsspiel möglich ist. Es besteht kein Anspruch auf Support.
+MIT, siehe [LICENSE](LICENSE).
