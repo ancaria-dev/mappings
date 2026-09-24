@@ -107,8 +107,8 @@ The generator rejects:
 Line-specific failures include the line number. The generator calculates an
 exported RVA from the VA after checking the supplied RVA.
 
-This repository has no CI workflow. Run `python mappings.generator.py --check`
-manually before committing.
+CI runs `python mappings.generator.py --check` on every push and pull request.
+Run it yourself before committing so a stale `mappings.json` never lands.
 
 ## Consumers
 
