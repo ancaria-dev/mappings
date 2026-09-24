@@ -134,6 +134,17 @@
 0x006DEF80  0x2DEF80   journalStatisticsPage::build       thiscall                                 confirmed  Playing time / opponents / resurrections / world %.
 0x006AF5A0  0x2AF5A0   cUI_Diary::build                   thiscall                                 static
 0x00673300  0x273300   uiControlById                      thiscall(int id) -> control*             static
+0x00726980  0x326980   cUI_Window2::onShow                thiscall(window)(bool show)              confirmed  [key=windowShow hooked] Vtable slot 9 of every window. Each override calls this base first (30 direct callers); the window name is char [window+0x30], visible is bit 0 of [window+0x10]. Called once per window whose visibility actually changes, children included (the inventory brings STATS_CHAR and EQUIPMENT). Tooltips run it constantly, so filter by name before sending anything. NOT reached by cUI_Horse, cUI_OverviewMap and cUI_NetLan, which own an onShow that skips it. Live 2026-09-24: main menu, options, hero select, load game, esc menu, inventory, journal, world map, console, merchant, blacksmith, combat master and chest, open and close each.
+0x00731910  0x331910   cUI_Control2::receive_event        thiscall(control)(ev) -> bool            static     DO NOT HOOK: runs for every control on every UI event. Where a class-5 event whose target equals char [control+0x30] becomes onShow: id 0x11 shows (+0x331976 calls vtable slot 9), 0x12 hides, 0x13 toggles, flags [ev+8] are ORed into [control+0x10].
+0x00757530  0x357530   cUI_Manager::receive_event         thiscall(manager)(ev) -> bool            confirmed  [key=uiEvent hooked] Vtable slot 0 of cUI_Manager. The one funnel every window open and close passes: the kernel delivers here (return +0x408B27) and the manager's own hotkey code calls it directly for the journal and the world map, bypassing the kernel. Veto by rewriting the id [ev+4] to one nothing handles (0x7FFF) for the call and restoring it on leave. Live 2026-09-24: inventory (kernel path) and journal (hotkey path) each refused twice that way and opened the third time, with nothing broken after. Rate in the world 1 to 18 calls a second, against up to 350 for cKernel::receive_event, so hook this and never the kernel. The chest's own open event (id 0x23) was not seen here.
+0x00755DA0  0x355DA0   cCommand_MultiEvent::execute       thiscall(cmd)()                          confirmed  [key=uiCommand hooked] A menu button's command: sends each event of the vector [cmd+4]..[cmd+8] through cKernel::receive_event(ev, 0, 0). One click is a pair, show the next window and hide this one (Options: 0x11 UI_WND_OPTIONS then 0x12 UI_MAINMENU), or the main menu's page event 0x37 [ev+8]=1, [ev+0xC]=page (1 multiplayer, 0 back). Vetoing one event of a pair leaves a black screen, so veto the whole command: swap ECX for a zeroed 12-byte fake whose begin equals its end and the loop sends nothing. Live 2026-09-24: Options refused twice that way, the main menu stayed and worked. Entry `push esi / push edi / mov edi, ecx`, nothing branches into it.
+0x007563D0  0x3563D0   cCommand_exitGame::execute         thiscall(cmd)()                          confirmed  [key=exitGame hooked] The main menu's Quit button: logs "cCommand_exitGame()::execute() WM_CLOSE" and posts WM_CLOSE to the main window, with no confirmation. It reads neither this nor an argument, so the only veto is Interceptor.replace; the original is then called through a NativeFunction that MUST pass exceptions:'propagate', or Frida's default 'steal' aborts it with "system error" and Quit stops working (seen live). Live 2026-09-24: refused once, quit on the second click. After WM_CLOSE the window goes but pureHD.exe itself does not exit; that is the wrapper's own bug.
+0x00720590  0x320590   cUI_BusyDlg::react                 thiscall(dlg)(int reaction, int arg)     confirmed  [key=busyReact hooked] What a yes/no dialog does when answered: switch on reaction 1..16 through the table at 0x00720BAC. 3 = BUSY_REACTION_EXITGAME, leave the world for the main menu (runs cCommand_armaStop); 5 = post WM_CLOSE, the Esc-dialog quit; 6, 7 and 14 do nothing. Veto by rewriting reaction to 6. ret 8. Live 2026-09-24: reaction 5 refused once that way, the dialog closed and the game stayed. Reaction 3 was seen running armaStop (return +0x320946) but its veto was not tried.
+0x00755ED0  0x355ED0   cCommand_armaPlay::execute         thiscall(cmd)()                          confirmed  [key=gameStart hooked] Enters the world. Live 2026-09-24: once per loaded save, from cUI_Savegame (return +0x31CF32) after its busy dialog closed. Not a veto point: the menus are already hidden when it runs.
+0x00755F40  0x355F40   cCommand_armaStop::execute         thiscall(cmd)()                          confirmed  [key=gameStop hooked] Leaves the world for the main menu, run from cUI_BusyDlg::react reaction 3. Live 2026-09-24: once per exit to the main menu.
+0x00756400  0x356400   cCommand_onInvOpen::execute        thiscall(cmd)()                          confirmed  The inventory hotkey. Sends 0x11 UI_WND_INVENTORY through the kernel.
+0x00756560  0x356560   cCommand_onInvClose::execute       thiscall(cmd)()                          confirmed  The same for closing.
+0x00712080  0x312080   cUI_MainMenu vtable slot 13        thiscall(menu)() -> bool                 static     Esc on the main menu: backs out of the credits and the sub-pages, otherwise opens the DEFAULT_BUSYDLG "UI_BUSY_REALLY_QUIT%d" dialog (event 0x39) whose yes is reaction 5.
 
 # --- misc / runtime ----------------------------------------------------------
 0x007F4160  0x3F4160   cCreatureHero::debugInfo dump      thiscall                                 static     Prints Name/Class/Exp/Gold/Hitpoints. Class switch table at 0x007F4B64.
@@ -279,6 +290,16 @@
 #   [sheet+0x106] its end (the rune path reads `mov ecx, [esi+0x102]`), and the
 #   rune write is +0x1822AB (row above).  Both were open questions here once.
 
+# cEventUI2, the UI event (vtable 0x0088FDD0, base cEvent 0x0088F890, 0x74 bytes and up)
++0x04      dword    id                         confirmed  0x11 show, 0x12 hide, 0x13 toggle, 0x10 focus, 0x37 main menu page, 0x39 busy dialog, 0x23 chest.
++0x08      dword    flags / first parameter    confirmed  Show and hide carry 5 from buttons and 1 from Esc. For 0x37 it is 1 and +0x0C is the page.
++0x28      char[32] from                       confirmed  Usually empty; "<WindowProc_engine>" when Esc opens the esc menu.
++0x48      char[32] to                         confirmed  The target window's name, compared with char [window+0x30].
+
+# cUI_Window2 (every window; controls share the first part through cUI_Control2)
++0x10      dword    flags                      confirmed  Bit 0 visible.
++0x30      char[]   name                       confirmed  UI_MAINMENU, UI_WND_INVENTORY, ... Read in onShow live.
+
 
 ## ============================================================================
 ## WORLD
@@ -361,3 +382,5 @@
 0x00AD6734  rain timer (float)                             confirmed  Time of the NEXT rain change, both start and stop write it, so it is not an "is it raining" flag.
 0x00AD6730  fog timer (float)                              confirmed  Same for fog.
 0x0182DCD0  localized UI string dictionary                 confirmed  Reached through uiString (0x00673360).
+0x0182DDC8  campaign of the main menu (word)               confirmed  [key=campaign] 0 = Ancaria, 1 = Underworld. cUI_MainMenu::receive_event sets it for the button it dispatches to (UI_LABEL_NEWGAME / UI_LABEL_NEWADDON), so it is right by the time the button's command runs. Live 2026-09-24: 0 on Ancaria Campaign, 1 on Underworld Campaign, read as the hero select opened.
+0x0088FDD0  cEventUI2 vtable                               confirmed  [key=eventUi2] Tells a UI event from the rest at cUI_Manager::receive_event with one read. Layout under STRUCTURES.
