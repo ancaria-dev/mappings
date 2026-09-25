@@ -68,6 +68,10 @@
     "calendarScale": "0x176B0",
     "itemName": "0x4A600",
     "modifierLine": "0x1C48C0",
+    "getAlliances": "0x22820",
+    "resetAlliances": "0x227C0",
+    "setAlliance": "0x23430",
+    "setCreatureClass": "0x12E830",
     "regionEnter": "0x93070",
     "regionExit": "0x93420",
     "sectorEnter": "0x93DD0",
@@ -86,6 +90,7 @@
     "engineEventVtable": "0x88FB38",
     "calendar": "0xAA34C0",
     "areas": "0xAA9CA8",
+    "allianceMatrix": "0x8EA550",
     "campaign": "0x182DDC8",
     "eventUi2": "0x88FDD0",
     "difficulty": "0x182DDC4"
