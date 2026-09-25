@@ -118,11 +118,11 @@
 0x006075E0  0x2075E0   cObjectManager::terminateHero      thiscall                                 confirmed  [key=heroTerminate hooked] The point where hero pointers must be dropped.
 0x00558340  0x158340   cCreature::pickupItem              thiscall(creature)(int ref, ...)         confirmed  [key=itemPickup hooked] Verified live: a1 resolved to the item that was picked up. CANCELABLE AND SUBSTITUTABLE, and both fall out of the game's own code rather than a trick: the function derives everything from objectByIndex(ref) and, when that returns NULL, `je 0x0055937C` at +0x00558380 jumps straight to the epilogue. So args[0]=0 is the game's own no-op path, and args[0]=<other ref> picks up a different object. Arg slot checked, not derived: the body reads it at [esp+0x6C] after pushing 0x68 bytes, i.e. [esp+4] at entry = args[0].
 #                                                                                                            Hook the ENTRY. ASK only when ECX is the hero: the other 3 callers are creature AI and the rate there is unmeasured.
-0x00549660  0x149660   cCreature::inventory_putItem       thiscall(creature)(int ref, ...)         static     [key=itemStore hooked] Entry hooked read-only (item.stored). Prologue `sub esp,0xC / push ebp / mov ebp,[esp+0x14]` = 8 bytes before the arg read, so args[0] is the ref.
+0x00549660  0x149660   cCreature::inventory_putItem       thiscall(creature)(int type, int count, int ref, int inventory) -> int  static  [key=itemStore hooked] Entry hooked read-only (item.stored). The FIRST argument is a type id, not a ref: the body looks it up in the type table (itemSize 0x00428D60, `cmp eax, 0x7E60`) and passes it to cObjectManager::create as the type. The ref is the THIRD argument ([esp+0x24] after three pushes); 0, or a ref whose object has flag 0x10, makes create build a fresh item. The fourth picks the inventory entry, 0 meaning the creature's own ([creature+0x0C]). Returns the item's ref, or 0 with the log line "cCreature::inventory_putItem() <no empty slots / drop into world>" when the bag is full. The new hero's kit (0x0060DFDD) calls it as (type, 1, 0, 0), and the script command at 0x006117A0 gives an item by type name the same way. The item.stored hook still reads args[0] as a ref, so its ref field is suspect until checked live. Old note, now contradicted: "Prologue `sub esp,0xC / push ebp / mov ebp,[esp+0x14]` = 8 bytes before the arg read, so args[0] is the ref."
 0x005560C0  0x1560C0   cCreature::equipment_equip         thiscall(creature)(int slot, int ref,    confirmed  [key=itemEquip hooked] Prologue bounds the slot at 0x12. ref 0 = clear the slot. Observed slots: 5 arms, 10/11 rings, 12/13 weapon-hand.
 #                                                                   int nn)
 0x00611850  0x211850   cEngine::creature_equipItem        thiscall                                 static
-0x005DF190  0x1DF190   cInventory::moveItem               thiscall(inv)(u16 src, u16 dst)          confirmed  [key=itemMove hooked] Entry hooked read-only (item.moved). Slot indices only, no item identity on this path.
+0x005DF190  0x1DF190   cInventory::moveItem               thiscall(inv)(u16 src, u16 dst)          confirmed  [key=itemMove hooked] Entry hooked read-only (item.moved). Slot indices only, no item identity on this path. STATIC CORRECTION: src and dst are inventory ENTRY indices, not grid cells. Both are bounded by 0x20 and turned into manager + index*0x1180 exactly as cInventory::entry (0x005DF160) does, and the log line reads "cInventory::moveItem(src=%d,dst=%d, ref=%d)". So item.moved names two inventories. Not yet checked live.
 
 # --- names / localization ----------------------------------------------------
 0x00673360  0x273360   uiString (localized lookup)        thiscall(any)(const char* key) -> entry*  confirmed  [key=uiStringFn] CALLABLE. Hashes the ASCII key, looks it up in the global dictionary at 0x0182DCD0, returns entry+8; the STRING POINTER is *(wchar**)result. ECX is only used on a miss (returns this+0xC), so any readable pointer works. 415 call sites. Verified: UI_STATS_VICTORY -> "Opponents Defeated", UI_REGION_REGION -> "Region". This is the general way to get LOCALIZED text, so never hardcode English tables.
@@ -181,6 +181,14 @@
 0x00603CC0  0x203CC0   cObjectManager::debug              thiscall(mgr)()                          static     Dumps every object to the game log: "Ref[%6d] eItemType%4d name[%-32s] map[%4d] pos[%6d,%6d] zlayer[%d] flags[%c%c%c%c%c] next%4d listener[%s][%6d]". The fields it reads are the world object layout (WORLD section): type +0x10, sector word +0x18 (its "map"), position +0x1C/+0x20, z layer byte +0x24, flags +0x14, next +0x30. Then counts objects per family ("Family[%12s] has %4d instances") through itemTypeFamily. No caller by direct call.
 0x00426220  0x026220   itemTypeFamily                     thiscall(types)(int typeId) -> byte      static     `this` is [0x00AAA564]. Returns byte [this + typeId*0x80 + 0x2E] for 0 < typeId < 0x7E60, else 0. Coderpack reads the same byte instead of calling it; the values it gave live are under the itemTypes row.
 0x0043FD40  0x03FD40   family name parser                 cdecl(const char* text, int* found) -> int  static  Turns "FAMILY_<name>" into the family number: 1 OBJECT, 2 CREATURE_NPC, 3 CREATURE_PC, 4 CONTAINER, 5 WEAPON, 6 ARMOR, 7 COLLECTABLE, 8 RING, 9 POTION, 10 DOOR, 11 TRAP, 12 FX, 13 SHIELD, 14 KEY, 15 SPECIAL, 16 SCROLL, 17 HELMET, 18 BOOTS, 19 BELT, 20 AMULET, 21 SHOULDER, 22 BRACERS, 23 GREAVES, 24 GLOVES, 25 WINGS, 26 BLACKSMITH, 27 ARROW, 28 UPGRADE, else 0. Live, every creature carries 3 (monsters, NPCs, animals and the hero alike), so "PC" does not mean player and 2 was never seen. Families 29 (TYPE_HORSEBIT_*), 32 (TYPE_NPC_FISH01) and 33 (cannons) occur in play and have no name here.
+0x005DF090  0x1DF090   getInventories                     cdecl() -> cInventory*                  static     Lazily creates the inventory manager at [0x00AD33C8]: 0x23008 bytes, 32 entries (cInventoryEntry) of 0x1180 bytes, each entry's word +0x1160 set to its index. At the putItem call site the two pushes before it belong to the next call.
+0x005DF160  0x1DF160   cInventory::entry                  thiscall(inv)(u16 index, ?) -> cInventoryEntry*  static  manager + index*0x1180 for index < 0x20, else NULL.
+0x005DA3D0  0x1DA3D0   cInventoryEntry::put               thiscall(entry)(u16 cell, int ref, u8 w, u8 h, bool)  static  Writes the cell record (layout under STRUCTURES) and zeroes the item's sector word, position and z layer: that is why a carried object has sector 0. Logs "inventory slot%d wxh=%d/%d ref%d" when the cell does not fit.
+0x005DB180  0x1DB180   cInventoryEntry::fits              thiscall(entry)(u16 cell, u16 w, u16 h) -> bool  static  row = cell / width, col = cell % width (width word +0x115C, height +0x115E); a cell is taken when bit 0 of its byte +4 is set.
+0x005DB070  0x1DB070   cInventoryEntry::findPlace         thiscall(entry)(w, h, u16* cell, bool)  static     Walks cells 0..width*height-1 through fits.
+0x00428D60  0x028D60   itemSize                           thiscall(types)(int type, int* w, int* h)  static  Cell size of a type, from the type table.
+0x006117A0  0x2117A0   give item by name                  thiscall(?)(int creatureRef, const char* typeName)  static  Resolves the name (0x0043CD90), casts the ref's object to a creature and calls inventory_putItem(type, n, 0, 0). Called by the script interpreter.
+0x00549770  0x149770   cCreature::hasEquippedType         thiscall(creature)(int type) -> bool      static     Walks the 19 equipment refs at +0x1A4.
 
 ## ============================================================================
 ## STRUCTURES
@@ -192,6 +200,7 @@
 +0x1C      dword    worldX                     confirmed  Can go stale while walking.
 +0x20      dword    worldY                     confirmed
 +0x38      byte     regionId                   static     Also the anti-cheat XOR key, broadcast to 4 bytes.
++0x1A4     dword[19] equipment                 confirmed  Item refs by slot, 0 when empty; the same array on every creature. Slots from the hero (named by the user) and the families of what 1282 creatures wore: 0 helmet, 1 body armour, 2 belt, 3 boots, 5 bracers, 6 amulet, 8..11 rings (four), 12 off hand (shield or a second weapon), 13 main hand, 15 shoulders, 16 greaves, 17 wings. 4, 7, 14 and 18 were never seen filled.
 +0x3A8     struct   sheet                      confirmed  The embedded character sheet, offsets below.
 +0x3B4     dword    experience                 confirmed  == sheet+0x0C
 +0x3B8..C2 word[6]  strength..charisma         confirmed  == sheet+0x10..0x1A
@@ -315,6 +324,16 @@
 # cUI_BusyDlg (DEFAULT_BUSYDLG), on top of cUI_Window2
 +0x154     dword    mode                       confirmed  3 the leave-the-world question, 5 the portal list. Read on show.
 
+# cInventoryEntry: one of 32 in the manager at [0x00AD33C8], 0x1180 bytes each.
+# A creature's own entry is the one whose index equals [creature+0x0C]; the hero (ref 1) owns entry 1.
+# Read live against the user's description of the bag: three runes down column 0, a 1x2 dagger right of them,
+# a 1x3 sword below them, two potions right of the dagger.
++0x18+12i struct   cell i                     confirmed  i = row*width + col. +0 dword item ref, only in the item's top-left cell; +4 byte, bit 0 set on every cell the item covers; +5 byte item width; +6 byte item height; +8 word item type.
++0x115C   word     width                      confirmed  20 for the hero
++0x115E   word     height                     confirmed  8 for the hero
++0x1160   word     index                      confirmed  0..31, its own position in the manager
++0x1162   word     flags                      static     put ORs 0x10 in. Entry 0 read 4, the hero's 16.
+
 
 ## ============================================================================
 ## WORLD
@@ -406,6 +425,7 @@
 0x00AAAE98  quest table pointer                            static     [key=questTable] Records of 0x124 bytes, +0 the quest number. Searched by TriggerQuest and read by the quest-end function.
 0x00AD4BC0  object manager pointer                         confirmed  [key=objectManager] [[0x00AD4BC0]+4] = ref -> object table, +8 = end.
 0x00AAA564  item type table pointer                        confirmed  [key=itemTypes] Records of 0x80 bytes by type id (0 < id < 0x7E60), the family byte at +0x2E (itemTypeFamily 0x00426220). Read live over a loaded town's 3600 objects: family and RTTI class agree on every object (3 cCreature, 4 cChest3D for chests and barrels, 5 cWeapon3D, 8 cRing3D, 9 cPotion3D, 10 cObject3D doors, 12 cObjectFX, 13 cShield3D, 15 cSpecial3D gold and signposts, 28 cItemUpgrade runes).
+0x00AD33C8  inventory manager pointer                      confirmed  [key=inventories] 32 cInventoryEntry of 0x1180 bytes from the pointer (getInventories 0x005DF090). Read live: entry 1 is the hero's bag.
 0x00AD6734  rain timer (float)                             confirmed  Time of the NEXT rain change, both start and stop write it, so it is not an "is it raining" flag.
 0x00AD6730  fog timer (float)                              confirmed  Same for fog.
 0x0182DCD0  localized UI string dictionary                 confirmed  Reached through uiString (0x00673360).

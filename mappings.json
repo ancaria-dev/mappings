@@ -73,6 +73,7 @@
     "questTable": "0xAAAE98",
     "objectManager": "0xAD4BC0",
     "itemTypes": "0xAAA564",
+    "inventories": "0xAD33C8",
     "campaign": "0x182DDC8",
     "eventUi2": "0x88FDD0",
     "difficulty": "0x182DDC4"
