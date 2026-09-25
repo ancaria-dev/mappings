@@ -178,6 +178,9 @@
 0x006254B0  0x2254B0   cWorldView::setViewPosition        thiscall(int x, int y)                   confirmed  [key=posCamera hooked] Camera pan (the inventory nudges it ~100 units). Args are NOT player coords, used only as a trigger to resample hero+0x1C.
 0x00891044  0x491044   PPOS divisor (float)               data = 53.66563034057617                 confirmed  [key=posScale] Read by worldToPPOS. HUD position = trunc(world / this), truncating toward zero to match _ftol.
 
+0x00603CC0  0x203CC0   cObjectManager::debug              thiscall(mgr)()                          static     Dumps every object to the game log: "Ref[%6d] eItemType%4d name[%-32s] map[%4d] pos[%6d,%6d] zlayer[%d] flags[%c%c%c%c%c] next%4d listener[%s][%6d]". The fields it reads are the world object layout (WORLD section): type +0x10, sector word +0x18 (its "map"), position +0x1C/+0x20, z layer byte +0x24, flags +0x14, next +0x30. Then counts objects per family ("Family[%12s] has %4d instances") through itemTypeFamily. No caller by direct call.
+0x00426220  0x026220   itemTypeFamily                     thiscall(types)(int typeId) -> byte      static     `this` is [0x00AAA564]. Returns byte [this + typeId*0x80 + 0x2E] for 0 < typeId < 0x7E60, else 0. Coderpack reads the same byte instead of calling it; the values it gave live are under the itemTypes row.
+0x0043FD40  0x03FD40   family name parser                 cdecl(const char* text, int* found) -> int  static  Turns "FAMILY_<name>" into the family number: 1 OBJECT, 2 CREATURE_NPC, 3 CREATURE_PC, 4 CONTAINER, 5 WEAPON, 6 ARMOR, 7 COLLECTABLE, 8 RING, 9 POTION, 10 DOOR, 11 TRAP, 12 FX, 13 SHIELD, 14 KEY, 15 SPECIAL, 16 SCROLL, 17 HELMET, 18 BOOTS, 19 BELT, 20 AMULET, 21 SHOULDER, 22 BRACERS, 23 GREAVES, 24 GLOVES, 25 WINGS, 26 BLACKSMITH, 27 ARROW, 28 UPGRADE, else 0. Live, every creature carries 3 (monsters, NPCs, animals and the hero alike), so "PC" does not mean player and 2 was never seen. Families 29 (TYPE_HORSEBIT_*), 32 (TYPE_NPC_FISH01) and 33 (cannons) occur in play and have no name here.
 
 ## ============================================================================
 ## STRUCTURES
@@ -349,6 +352,17 @@
 # hero (full+0x38).
 
 
+# World object: every entry of the ref -> object table (creatures, items, chests,
+# doors, effects).  From cObjectManager::debug (0x00603CC0) and cInventoryEntry::put
+# (0x005DA3D0), then read live over all 3600 objects of a loaded town.
++0x0C      dword    own ref                    confirmed  Equals the table index for every object, creatures included (3496 of 3496 live).
++0x10      dword    type id                    confirmed  Its family (object kind) is itemTypeFamily(type), see the itemTypes global.
++0x14      dword    flags                      static     The debug dump prints E 0x2, D 0x10, V 0x20, Q 0x1000, S 0x4000000. Live, carried items all had 0x2 and most items on the ground 0x400000. Not used by Coderpack.
++0x18      word     sector                     confirmed  The debug dump's "map". 0 for an object in an inventory, a chest or an equipment slot: cInventoryEntry::put zeroes it together with the position. The hero's was 2124, the centre of the enterRegion burst.
++0x1C      dword    world x                    confirmed  0 while carried. A two-hander dropped live lay 62 units from the hero.
++0x20      dword    world y                    confirmed
++0x24      byte     z layer                    static
+
 # Item object (reached through the same ref -> object table as creatures).
 # Mapped by matching live tooltips: "Damaged Bracer of Oblivion" (armour) and
 # "Gallant Ring of Cinders" (ring).
@@ -391,6 +405,7 @@
 0x00AA9C18  cStats+0x5700 (playing time ms) in SP           confirmed
 0x00AAAE98  quest table pointer                            static     [key=questTable] Records of 0x124 bytes, +0 the quest number. Searched by TriggerQuest and read by the quest-end function.
 0x00AD4BC0  object manager pointer                         confirmed  [key=objectManager] [[0x00AD4BC0]+4] = ref -> object table, +8 = end.
+0x00AAA564  item type table pointer                        confirmed  [key=itemTypes] Records of 0x80 bytes by type id (0 < id < 0x7E60), the family byte at +0x2E (itemTypeFamily 0x00426220). Read live over a loaded town's 3600 objects: family and RTTI class agree on every object (3 cCreature, 4 cChest3D for chests and barrels, 5 cWeapon3D, 8 cRing3D, 9 cPotion3D, 10 cObject3D doors, 12 cObjectFX, 13 cShield3D, 15 cSpecial3D gold and signposts, 28 cItemUpgrade runes).
 0x00AD6734  rain timer (float)                             confirmed  Time of the NEXT rain change, both start and stop write it, so it is not an "is it raining" flag.
 0x00AD6730  fog timer (float)                              confirmed  Same for fog.
 0x0182DCD0  localized UI string dictionary                 confirmed  Reached through uiString (0x00673360).
