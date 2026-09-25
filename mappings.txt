@@ -192,6 +192,11 @@
 0x00417F10  0x017F10   getWeather                         cdecl() -> cWeather*                    static     Lazily creates the weather object (0x12E6C bytes) at [0x00AA34C4]. showWorld calls it before every weather decision.
 0x00419B10  0x019B10   cWeather::receive_event            thiscall(weather)(cEvent*)              static     Handles cEventWeather (vtable 0x0088F928, type 0x24 from vcall +8): +8 subtype, +0x0C value 0..100 (clamped), 0x1C bytes, the rest zero. Subtype 1 clears every target, 2 rain (flag bit 0, target +0x20 = value*30, above 75 also bit 2), 3 fog (bit 1, target +0x178 = value*2), 5 snow (bit 4, target +0x9158 = value*30, at most 3000). Value 0 only zeroes the target; the tick (0x0041A590) clears the bit once the current strength has faded to 0. This is exactly what showWorld sends at its RainStart/RainStop/FogStart/FogStop prints (rain 2 at 0x0062612A, fog 3 at 0x00625E85). In a network game (byte 0x0182DB6C) it also broadcasts; single player does not reach that path. Callable from the engine thread with a message built in foreign memory: the caller owns the message.
 0x0041A590  0x01A590   cWeather tick                      thiscall(weather)(...)                  static     Moves each current strength toward its target (rain +0x1C, fog +0x17C, snow +0x9154) and clears the flag bit when a current strength reaches 0 with the target at 0 (`and al, 0xFE` at 0x0041A8C5, `and al, 0xFD` at 0x0041A93C, `and al, 0xEF` at 0x0041AB2A). Boundary approximate.
+0x004175E0  0x0175E0   getCalendar                        cdecl() -> cCalendar*                   static     Lazily creates the calendar (0x38 bytes, vtable 0x0088F8E8) at [0x00AA34C0], starting at 1370-02-14 08:00:00 with scale 24 and both speed factors 1.0. The save's "calendar" section goes through it.
+0x00417740  0x017740   cCalendar::advance                 thiscall(cal)(float seconds)            static     seconds * scale (+0x0C) * the day factor (+0x10) while the hour is 7..19, else the night factor (+0x14), added to the time at +0x18. So the game itself treats 07:00..19:59 as day.
+0x00417A10  0x017A10   cCalendar::getTime                 thiscall(cal)(sCalendarTime* out)       static     Copies the 16-byte time out.
+0x00417A80  0x017A80   cCalendar::setTime                 thiscall(cal)(sCalendarTime by value)   static     Takes the 16-byte time by value (ret 0x10): dword year, then words month, day, hour, minute, second, pad. Writes the fields and nothing else. In Frida: four dwords, (year, month | day<<16, hour | minute<<16, second).
+0x004178D0  0x0178D0   cCalendar::serialize               thiscall(cal)(stream*, bool save)       static     "cCalendarTime::save(true) num=%d size=%d"; writes size 0x38, the scale, year, month, day, then the time of day.
 
 ## ============================================================================
 ## STRUCTURES
@@ -347,6 +352,18 @@
 +0x9154    dword    snow strength now          static
 +0x9158    dword    snow target                static     value*30, at most 3000.
 
+# cCalendar at [0x00AA34C0] (getCalendar 0x004175E0).  Read live every ten seconds for twelve minutes: ten real
+# seconds moved it four game minutes (scale 24), and the hour read 17 when the user called it evening.
++0x0C      float    scale                      confirmed  24.0: game seconds per real second.
++0x10      float    day factor                 confirmed  1.0
++0x14      float    night factor               confirmed  1.0
++0x18      dword    year                       confirmed  1370
++0x1C      word     month                      confirmed  2
++0x1E      word     day                        confirmed  19 after a few in-game days
++0x20      word     hour                       confirmed  0..23
++0x22      word     minute                     confirmed
++0x24      word     second                     confirmed
+
 
 ## ============================================================================
 ## WORLD
@@ -373,7 +390,7 @@
 # Day/night: the HUD has a day/night disc (UI_TB_DAYNIGHT, built at 0x006E4F10)
 # but it is drawn, not printed, so the format-trace trick does not apply.
 # Diffing the module's writable memory for steadily advancing values turned up:
-0x00AD3364  world phase? float                              suspect    ~4.31 rising 0.00224/s; if it wraps at 2*PI the cycle is ~47 min, the right order for a day/night cycle. UNVERIFIED against the in-game clock.
+0x00AD3364  world phase? float                              suspect    ~4.31 rising 0.00224/s; if it wraps at 2*PI the cycle is ~47 min, the right order for a day/night cycle. UNVERIFIED against the in-game clock. Not the calendar: it went 3.341 -> 4.198 while the calendar went 17:02:29 -> 21:13:43 (15074 game seconds).
 0x00AD53E4  slow float A                                    suspect    6.1926 rising 0.00014/s (~12.5 h per 2*PI).
 0x00AD5E8C  slow float B                                    suspect    Tracks 0x00AD53E4 exactly.
 0x017ED94C  slow float C                                    suspect    Tracks 0x00AD53E4 with a small offset.
@@ -442,6 +459,7 @@
 0x00AD6734  rain timer (float)                             confirmed  Time of the NEXT rain change, both start and stop write it, so it is not an "is it raining" flag.
 0x00AD6730  fog timer (float)                              confirmed  Same for fog.
 0x00AA34C4  weather object pointer                         confirmed  [key=weather] cWeather (getWeather 0x00417F10), layout under STRUCTURES. Non-null in a loaded world and read live; the meaning of its flags is from the disassembly.
+0x00AA34C0  calendar pointer                               confirmed  [key=calendar] cCalendar (getCalendar 0x004175E0), layout under STRUCTURES.
 0x00AD672C  weather zone bits (byte)                       static     showWorld marks the first rain, fog and snow zone it handles with bits 1, 2 and 4. Read 2 live.
 0x0182DCD0  localized UI string dictionary                 confirmed  Reached through uiString (0x00673360).
 0x0182DDC8  campaign of the main menu (word)               confirmed  [key=campaign] 0 = Ancaria, 1 = Underworld. cUI_MainMenu::receive_event sets it for the button it dispatches to (UI_LABEL_NEWGAME / UI_LABEL_NEWADDON), so it is right by the time the button's command runs. Live 2026-09-24: 0 on Ancaria Campaign, 1 on Underworld Campaign, read as the hero select opened. It is the world's campaign too, not only the last button: cEngine::load clears it and sets 1 when the save's world type (dword [esp+0x308] at +0x21BDCF) is 3, 0 when it is 2 (+0x21BDD6..+0x21BDF2), and the game-state function 0x007DBB20 (15 callers) recomputes it from 0x007DAB20. That part is static: not yet read in the game after a load.

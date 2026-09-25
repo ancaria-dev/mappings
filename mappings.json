@@ -75,6 +75,7 @@
     "itemTypes": "0xAAA564",
     "inventories": "0xAD33C8",
     "weather": "0xAA34C4",
+    "calendar": "0xAA34C0",
     "campaign": "0x182DDC8",
     "eventUi2": "0x88FDD0",
     "difficulty": "0x182DDC4"
