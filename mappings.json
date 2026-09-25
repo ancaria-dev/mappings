@@ -66,6 +66,8 @@
     "areaKill": "0x23CB0",
     "textId": "0x272DB0",
     "calendarScale": "0x176B0",
+    "itemName": "0x4A600",
+    "modifierLine": "0x1C48C0",
     "regionEnter": "0x93070",
     "regionExit": "0x93420",
     "sectorEnter": "0x93DD0",
