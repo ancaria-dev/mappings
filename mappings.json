@@ -32,6 +32,8 @@
     "objDestroy": "0x1FC300",
     "worldLoad": "0x203260",
     "heroLoad": "0x205DF0",
+    "createByType": "0x1FBF90",
+    "setCreatureLevel": "0x165010",
     "heroTerminate": "0x2075E0",
     "itemPickup": "0x158340",
     "itemStore": "0x149660",
