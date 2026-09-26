@@ -82,6 +82,28 @@
 0x005822AB  0x1822AB   combat art rune invest write        mov [eax+6], bl                          confirmed  [key=artRaise hooked] EAX = the 22-byte record, BL = the new base level (already old + step), CL = the step. Found by watchpointing the authoritative array; one call per rune click, live. 3 bytes, so the patch also takes `or byte [eax+8], 1` (the dirty flag) and ends at the unconditional `jmp 0x5822E8`: nothing reads the flags afterwards and nothing branches into +0x1822AE. Mid-function, onEnter only. Rewriting BL (keeping the rest of EBX) changes what is stored. The step > 255 case returns earlier (+0x18229D) and never reaches here.
 0x00580E2D  0x180E2D   combat art cache refill                                                     confirmed  Writes the 16-byte display cache. This is what undoes a write to the cache.
 
+# --- combos ------------------------------------------------------------------
+# Four combo slots on the sheet, a std::vector of 38-byte records at +0x10E (layout under STRUCTURES).
+# A step is a global art id: 1..72 a spell, 1000+ a melee special move (the item modifier ids).
+0x00581680  0x181680   setCombo                           thiscall(sheet)(u16 slot, dword steps[4]*, u16 levels[4]*, u16 symbol)  confirmed  [key=comboSet] ret 0x10. Writes the whole record: symbol, 4 step ids, 4 levels, charge 0, rate 1.0, and a recharge total of 1.0 plus each step's recharge from the spell (0x004D1F00) or special move (0x004D2720) table; ids either table rejects add nothing. Sets sheet+0x127 in a network game. Callers: the sheet constructor and resetCombos (all four slots, symbols 0x200..0x203), the COMBO tab's unpack 0x006BF1B0 and the combo master 0x006D2380. Live 2026-09-26: the master called it from 0x006D2489 with slot 0, steps 1074, 1028, levels 1, 1, symbol 0x200, and again with slot 1, four steps of 1028, symbol 0x201; the record read back exactly that. The saved sheet (0x00585510) carries the vector, so a combo written here stays in a save.
+0x00581D10  0x181D10   comboReady                         thiscall(sheet)(u16 slot) -> int         confirmed  [key=comboReady hooked] 1 when charge +0x22 >= recharge total +0x1A. Two callers, both in the creature message handler 0x0052E870: 0x005303B0 (a summon's master) and 0x0053064C (the hero's own combo, return address below). Live 2026-09-26: one call per right click with a combo selected, 12 in five minutes, about 3 a second while clicking on cooldown; 0 while recharging, then 1. A function entry with no branch inside its first 5 bytes. Returning 0 sends the game down its own "not charged" path (0x005305F6).
+0x0053064C  0x13064C   .. return address of comboReady (hero combo start)             confirmed  [key=comboStartReturn] After a 1 here the handler writes full+0x2B4 = slot + 1 and full+0x2B3 = 0 (0x00530656) and the chain starts. Every live call in the 2026-09-26 session came from here.
+0x0052E870  0x12E870   cCreature message handler (combo start)                         static     An action whose art id is >= 0x200 is a combo: the loop at 0x005305D6 finds the slot whose symbol (0x00553E30) equals the id, asks comboReady and, if ready, starts it. Not ready: with Ctrl held it answers with a message, otherwise nothing.
+0x00581D90  0x181D90   findComboSlot                      thiscall(sheet)(u16 symbol) -> u16       static     The slot whose record starts with this symbol, 4 when none. The master and the HUD use it; the master makes a combo in the slot of the symbol the player picked.
+0x00581D50  0x181D50   comboHasSteps                      thiscall(sheet)(u16 slot) -> bool        static     Any of the four step ids nonzero. No callers found by E8 scan.
+0x00581CD0  0x181CD0   comboChargeRatio                   thiscall(sheet)(u16 slot) -> float       static     charge / total, capped at 1.0. The HUD's charge ring (0x006E3697).
+0x00581800  0x181800   comboText                          thiscall(sheet)(u16 slot, wchar*, u16 mode)  static     Mode 1 '%d/%d' pairs, modes 2 and 3 one '%s: %d' line per step through the art's name, mode 3 adds '%s: %.1f%s' with total / rate (the recharge in seconds). Tab tooltip and HUD.
+0x0056ADC0  0x16ADC0   comboStepId                        thiscall(sheet)(u16 slot, u16 step) -> int  static     Step 0..3: the dword at +0x02 + 4*step. Any larger step: the last filled one.
+0x0056AE90  0x16AE90   comboStepLevel                     thiscall(sheet)(u16 slot, u16 step) -> u16  static     Step 0..3: the word at +0x12 + 2*step.
+0x00553E30  0x153E30   comboSymbol                        thiscall(sheet)(u16 slot) -> u16         static     The record's +0x00 word, 0 past the end.
+0x00588FE0  0x188FE0   resetCombos                        thiscall(sheet)                          static     Resizes the vector to 4 and empties every slot with symbols 0x200..0x203. No direct callers.
+0x0055E470  0x15E470   sheet constructor                                                            static     Creates the four combo records empty with symbols 0x200..0x203, when the hero's type passes 0x00426650.
+0x005629E0  0x1629E0   sheet regeneration tick                                                      static     For each slot below its total: rate +0x1E = 1 + the steps' share of physical (special moves) or mental (spells) regeneration, then charge += elapsed * rate. Live the charge rose about 5.4 a second at rate 5.43.
+0x00562720  0x162720   art cooldown step                                                            static     Called by 79 art implementations. While a combo runs (full+0x2B4 != 0) it zeroes that slot's charge and writes sheet+0x59. Too many callers to hook.
+0x006D2380  0x2D2380   combo master: make                 thiscall(window)(int)                    confirmed  Cost from 0x006D24C0 against the gold at sheet+0x46, findComboSlot by the chosen symbol (window +0x77C), setCombo with the window's steps and levels, then AddGold(-cost). Live 2026-09-26: two makes, each one setCombo call.
+0x006BF290  0x2BF290   comboTab pack                      stdcall(u16 slot, out*) -> bool          static     Packs a slot for the taskbar: +4 symbol, +8/+0xC step ids two per dword (high word first), +0x10 four levels as bytes. 0x006BF1B0 is the reverse and clears the slot on NULL. Only 16 bits of a step id survive.
+0x00585510  0x185510   sheet serializer                                                             static     Reads and writes the sheet through a stream; carries the combo vector (count, then the records) next to the combat arts.
+
 # --- journal / statistics ----------------------------------------------------
 0x00424250  0x024250   cStats::recordKill                 thiscall(cStats)(int victimType, ?, int, ... ~16 args)  static     Copies the previous "last kill" record (+0x30C8 -> +0x30A4, 0x87 dwords), stores the new one at +0x32C0.., bumps a per-type table at cStats + victimType*16 (count at +4, a running max of args[2] at +8) when victimType < 0x300, then the opponents-defeated counter below. Two callers, +0x134E6C and +0x1368D5. args[0] is also compared with 0x47 right after the counter.
 0x004244A8  0x0244A8   opponentsDefeated write            mov [ebp+0x56F0], eax                    confirmed  [key=killCount hooked] EBP = cStats. EAX already incremented. Fires once per kill. Inside recordKill: EBX still holds its args[0] (the victim type, loaded at +0x2425B and only compared since), and [esp+0x2C] its args[2], the value kept as a per-type maximum (the victim's level? UNVERIFIED). `je 0x4244AE` at +0x2444A5 lands exactly past the 6-byte patch, not inside it.
@@ -240,6 +262,8 @@
 +0x1F4     dword    creature state flags       suspect    Bit 0 set on hostile creatures (goblins, skeletons, thieves, wolves) and clear on townsfolk, horses and deer, yet not the switch for attacking: set on four children live, it did not make them attackable, and the game cleared it again on three of them within a minute. Bit 0x40000 inverts areEnemies (0x00423580) for either creature, from the disassembly, not seen live. Bit 0x100 set on a living summoned wolf and cleared when the game released it (live). Other bits seen: 0x40 deer, 0x4000 soldiers and orcs, 0x80000, 0x8000000, 0x1000000 rabbits.
 +0x200     dword    creature flags 2           static     Bit 0x4 set on the hero and 0x8 on the horse while riding (live 2026-09-25); the hero loader clears both on a restored horse (0x006064B7, 0x006064DF). Bit 0x10000000 is "Enables the Attacking of Animals" (bonus 864): the recalculation sets it for every such modifier the creature wears (0x0057AC5D) and derives it afresh on each recalculation. Live 2026-09-25 on a Vampiress: 0x00080040 without the bonus shield, 0x10080040 wearing it, and the hero could then attack and kill rabbits. areEnemies makes a creature with it the enemy of every creature whose type passes 0x00426A30, unless that one is in its list at +0x39C or has a master (+0x251 > 0).
 +0x251     dword    master ref (follows)       confirmed  Unaligned. The ref of the creature this one follows. Live 2026-09-25 on a Vampiress: the Wolf Call wolf (TYPE_NATURE_WOLF_VAMP, class 3 NPC) read 1, the hero's ref, from the moment it appeared, while 756 other creatures read 0; when a second wolf was called, the first dropped to 0 HP and this field to -1. The PvP relation 0x00423480 judges a creature above ref 0x10 with +0x1F4 bit 4 by the creature here; 0x004EFAC7 sets it to -1 when it names no player. areEnemies skips its grudge list for a creature with this > 0.
++0x2B3     byte     combo step                 confirmed  The step of the running combo; 0 when it starts (0x0053065C). Live 2026-09-26: 1, 2, 3 through a four-step combo, 0 once it ended.
++0x2B4     byte     running combo              confirmed  slot + 1 while a combo's chain runs, 0 otherwise; the combo start writes it (0x00530656) and the message handler refuses a new combo while it is set. Live 2026-09-26: 1 for about three seconds after firing slot 1, 2 for slot 2.
 +0x3A8     struct   sheet                      confirmed  The embedded character sheet, offsets below.
 +0x3B4     dword    experience                 confirmed  == sheet+0x0C
 +0x3B8..C2 word[6]  strength..charisma         confirmed  == sheet+0x10..0x1A
@@ -271,11 +295,14 @@
 +0x46      dword    gold                       confirmed
 +0x4A..56  word[7]  unidentified               suspect    NOT the resistances.
 +0x56      word     level                      confirmed
++0x59      byte     last combo                 confirmed  slot + 1 of the combo whose chain is running or just ran, 0 otherwise; written by the art cooldown step 0x00562720. Live 2026-09-26: 1 then 2 while the combos in slots 1 and 2 ran, back to 0 a second later.
 +0x5A..E6  float[]  derived-stat block         confirmed  2-BYTE ALIGNED: a dword-aligned dump shows garbage.
 +0x66+4i   float    resistBase[i]              confirmed  i = physical, fire, magic, poison
 +0xD6+4i   float    resistMult[i]              confirmed  resistance[i] = round(resistBase[i] * resistMult[i]); the UI total is their sum.
 +0x102     dword    combatArts.begin           confirmed  std::vector of 22-byte combat-art records, see below. Only the arts a character owns.
 +0x106     dword    combatArts.end             confirmed
++0x10E     dword    combos.begin               confirmed  std::vector of 38-byte combo records, exactly four (the constructor and resetCombos size it to 4). Live 2026-09-26 on a Vampiress it held the four slots of the COMBO tab in tab order: top left, top right, bottom left, bottom right.
++0x112     dword    combos.end                 confirmed
 +0x128     dword    currentHp mirror           confirmed
 +0x12C     dword    maxHp                      confirmed
 +0x130     dword    currentHp                  confirmed
@@ -352,6 +379,16 @@
 #   The array's owner is the sheet: [sheet+0x102] is the vector's begin and
 #   [sheet+0x106] its end (the rune path reads `mov ecx, [esi+0x102]`), and the
 #   rune write is +0x1822AB (row above).  Both were open questions here once.
+
+# combo record (38 bytes, sheet [+0x10E] + 38 * slot).  Read from the getters and setCombo, then
+# live 2026-09-26: slot 0 read 1022 Turn into Vampire and 1026 Wolf Call at level 1, slot 3
+# 1032 Claw Jump and 1035 Bats at level 1, as the COMBO tab showed them.
++0x00      word     symbol                     confirmed  0x200 + slot as created; the action id a combo is fired with, matched by findComboSlot. Unchanged by the master.
++0x02      dword[4] step art ids               confirmed  0 = no step. 1..72 spell, 1000 and up special move (> 999 decides which regeneration charges it). Only the low word is used.
++0x12      word[4]  step levels                confirmed  The level each step fires at, chosen at the master.
++0x1A      float    recharge total             confirmed  1.0 + each step's own recharge; 79 for Turn into Vampire + Wolf Call, 16 for 1074 + 1028, 1.0 for an empty slot.
++0x1E      float    recharge rate              confirmed  Charge added per second, from the regeneration skills; 1.0 until the tick recomputes it. The tooltip's recharge seconds are total / rate.
++0x22      float    charge                     confirmed  Rises to the total; comboReady compares the two. Zeroed when a combo fires.
 
 # cEventUI2, the UI event (vtable 0x0088FDD0, base cEvent 0x0088F890, 0x74 bytes and up)
 +0x04      dword    id                         confirmed  0x11 show, 0x12 hide, 0x13 toggle, 0x10 focus, 0x37 main menu page, 0x39 busy dialog, 0x23 chest.
