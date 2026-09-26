@@ -21,6 +21,7 @@
     "comboSet": "0x181680",
     "comboReady": "0x181D10",
     "comboStartReturn": "0x13064C",
+    "comboPack": "0x2BF290",
     "killCount": "0x244A8",
     "resurrect": "0x246D0",
     "discover": "0x249C0",
@@ -66,6 +67,8 @@
     "posConvert": "0x2228C0",
     "posCamera": "0x2254B0",
     "posScale": "0x491044",
+    "setArtSlot": "0x1D9990",
+    "selectSlot": "0x1D9D30",
     "weatherEvent": "0x19B10",
     "calendarSet": "0x17A80",
     "areaKill": "0x23CB0",
@@ -102,6 +105,7 @@
     "screenshotPath": "0xCDB898",
     "campaign": "0x182DDC8",
     "eventUi2": "0x88FDD0",
+    "actionEvent": "0x88F95C",
     "difficulty": "0x182DDC4"
   },
   "hooked": [
