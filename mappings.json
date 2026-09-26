@@ -69,6 +69,8 @@
     "posScale": "0x491044",
     "setArtSlot": "0x1D9990",
     "selectSlot": "0x1D9D30",
+    "taskbarSelectArt": "0x2E1B40",
+    "taskbarSelectWeapon": "0x2E17B0",
     "weatherEvent": "0x19B10",
     "calendarSet": "0x17A80",
     "areaKill": "0x23CB0",
@@ -107,6 +109,7 @@
     "eventUi2": "0x88FDD0",
     "actionEvent": "0x88F95C",
     "taskbarSlots": "0x956044",
+    "taskbarVtable": "0x895AC0",
     "difficulty": "0x182DDC4"
   },
   "hooked": [
