@@ -106,6 +106,7 @@
     "campaign": "0x182DDC8",
     "eventUi2": "0x88FDD0",
     "actionEvent": "0x88F95C",
+    "taskbarSlots": "0x956044",
     "difficulty": "0x182DDC4"
   },
   "hooked": [
