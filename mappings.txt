@@ -103,6 +103,9 @@
 0x006D2380  0x2D2380   combo master: make                 thiscall(window)(int)                    confirmed  Cost from 0x006D24C0 against the gold at sheet+0x46, findComboSlot by the chosen symbol (window +0x77C), setCombo with the window's steps and levels, then AddGold(-cost). Live 2026-09-26: two makes, each one setCombo call.
 0x006BF290  0x2BF290   comboTab pack                      stdcall(u16 slot, out*) -> bool          static     Packs a slot for the taskbar: +4 symbol, +8/+0xC step ids two per dword (high word first), +0x10 four levels as bytes. 0x006BF1B0 is the reverse and clears the slot on NULL. Only 16 bits of a step id survive.
 0x00585510  0x185510   sheet serializer                                                             static     Reads and writes the sheet through a stream; carries the combo vector (count, then the records) next to the combat arts.
+0x004D1F00  0xD1F00    specialMoveById                    cdecl(u16 id) -> record*                 static     Linear search of the special move table: 0x78-byte records from 0x0094EE30, the global id (1000 and up) at +0x00, the name's text id at +0x08 (0x004D2110), the icon file name from +0x0C, a class mask at +0x70 (0x20 on every Vampiress move, 8 on the Dark Elf's Cobra). Nothing in the record says which of the Vampiress's forms may use a move.
+0x004D2720  0xD2720    spellById                          cdecl(u16 id) -> record*                 static     The same for spells: 0x94-byte records from 0x00951AD4, ids 1..72 at +0x00, the name's text id through 0x004D2AA0 (+0x04).
+0x0057676E  0x17676E   vampire arts list                                                           confirmed  Inside 0x005719C0: a skill bonus raises only the arts whose id is 0x406..0x40D, 1030 Blood Bite through 1037 Bats, unless the hero's flag 0x2000 is set. The game's own list of the vampire form's arts. Live 2026-09-26 the combat-art screen agreed: in the knight form (class 6) the usable arts were Turn into Vampire and the shared ones; in the vampire form (class 7) Turn into Knight, 1030..1037 and the shared ones, without Turn into Vampire. The records do not change between forms, only the hero's class. The screen names 1032 Shadow Claws; the combo tooltip calls it Claw Jump.
 
 # --- journal / statistics ----------------------------------------------------
 0x00424250  0x024250   cStats::recordKill                 thiscall(cStats)(int victimType, ?, int, ... ~16 args)  static     Copies the previous "last kill" record (+0x30C8 -> +0x30A4, 0x87 dwords), stores the new one at +0x32C0.., bumps a per-type table at cStats + victimType*16 (count at +4, a running max of args[2] at +8) when victimType < 0x300, then the opponents-defeated counter below. Two callers, +0x134E6C and +0x1368D5. args[0] is also compared with 0x47 right after the counter.
@@ -361,6 +364,11 @@
 #          +0x00  dword  1 or 2   (aspect group?)
 #          +0x04  byte   art id   (0x3C..0x4E)
 #          +0x05  byte   aspect   (0x00 for the first group, 0x04 for the second)
+#          +0x04 and +0x05 are ONE word, the global art id the item modifiers and combos use:
+#          art id + aspect * 256.  Live 2026-09-26 on a Vampiress, all 24 records resolved to a
+#          named special move: (254, 3) 1022 Turn into Vampire, (50, 4) 1074 Claws of Death,
+#          (11, 4) 1035 Bats.  The Daemon's (0x49, 4) is 1097 Battle Daemon.  The art level
+#          lookup at 0x00580D80 compares this word with the id it is asked for.
 #          +0x06  byte   BASE LEVEL   <- writing here sticks and shows in the UI
 #          +0x07  byte   gear bonus
 #          +0x0A  float  per-art value (regeneration?)
