@@ -53,6 +53,7 @@
     "frameFlip": "0x2461A0",
     "beginScene": "0x247180",
     "endScene": "0x247200",
+    "cursorClient": "0x26E6E0",
     "gameStart": "0x355ED0",
     "gameStop": "0x355F40",
     "scriptUse": "0x71B70",
