@@ -137,7 +137,12 @@
     "scriptSpots": "0xAB3538",
     "taskbarSlots": "0x956044",
     "taskbarVtable": "0x895AC0",
-    "difficulty": "0x182DDC4"
+    "difficulty": "0x182DDC4",
+    "timer": "0xCD69CC",
+    "viewXFromX": "0xAD6710",
+    "viewYFromX": "0xAD6714",
+    "viewXFromY": "0xAD6720",
+    "viewYFromY": "0xAD6724"
   },
   "hooked": [
     "getLocalHero",
