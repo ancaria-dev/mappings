@@ -105,6 +105,7 @@
     "resetAlliances": "0x227C0",
     "setAlliance": "0x23430",
     "setCreatureClass": "0x12E830",
+    "videoPlayFile": "0x2A1700",
     "videoOpen": "0x2A0EF0",
     "videoPlay": "0x2A1010",
     "regionEnter": "0x93070",
