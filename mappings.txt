@@ -516,6 +516,9 @@
 # cUI_Manager, the singleton at [0x017EDB3C].  Window pointers, read live 2026-09-26 by name at +0x30 of each.
 +0x08      dword    flags                      static     handleEsc returns unless bit 4 is set and bit 1 clear.
 +0x0C      HANDLE   menu thread                static     _beginthread's handle for cUI_ManagerThread::thread (0x00756740), kept by runThread. Live 2026-09-27 inside a world with the esc menu open: a handle whose GetThreadId read 0, so no menu thread runs there.
++0x2C      float    loading bar shown          static     Moves toward +0x30 each frame (0x00759410): the percent the bar draws.
++0x30      dword    loading bar percent        static     Set by the progress call 0x0075AFD0; zeroed by setLoading.
++0x34      char[32] loading bar label          confirmed  The progress call copies its label here unbounded (unless [0x017E6CB4], the language, is 3); the constructor zeroes 32 bytes (0x007568DF), so +0x54 follows. The menu thread draws it while bit 0x80 of +0x08 is set (0x00756D50 -> 0x00759410), so it keeps drawing while the main thread waits. Live 2026-09-28: Coderpack wrote "Mods: ..." here during its Game stages and the user saw it on the bar.
 +0x80      ptr[23]  windows                    confirmed  One pointer per window, +0x80 to +0xD8: TASKBAR, INVENTORY, EQUIPMENT, BLACKSMITH, MERCHANT, MEGAMAP, OVERVIEWMAP, MERC, STATS_CHAR, CONSOLE, QUESTBOOK, SAVEGAME, ESCMENU, PURCHASE, MASTER, OPTIONS, CHEST, HORSE, NETINFO, NETPORTRAIT (an empty name), UI_CHARACTER, CUBE, TRADE (all UI_WND_ but UI_CHARACTER). Filled by 0x007597E0.
 +0x124    ptr      window list begin          static     With +0x128 the end: the windows the manager hands a class-5 event it does not handle itself (0x007574D0, slot 4 of each until one takes it). 25 entries live.
 
