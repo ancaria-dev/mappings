@@ -166,6 +166,7 @@
     "goldDelta",
     "statGrant",
     "skillRaise",
+    "addExperience",
     "artRaise",
     "comboReady",
     "regenTick",
