@@ -129,6 +129,7 @@
     "actionEvent": "0x88F95C",
     "uiManager": "0x17EDB3C",
     "engineThread": "0x17E6CC0",
+    "engine": "0xAD5E78",
     "dxDriver": "0xCDB99C",
     "chestVtable": "0x890BB0",
     "objectEvent": "0x88F8AC",
