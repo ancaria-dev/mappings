@@ -158,6 +158,7 @@
     "timer": "0xCD69CC",
     "mouse": "0xCDCADC",
     "textureMgr": "0x13E67B8",
+    "uiSprites": "0x9EBEA8",
     "asyncKeyImport": "0x88F2B0",
     "viewXFromX": "0xAD6710",
     "viewYFromX": "0xAD6714",
