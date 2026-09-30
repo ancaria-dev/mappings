@@ -468,7 +468,7 @@
 +0x40      word     movementSpeed              confirmed  Matches the "Movement Speed" row (164).
 +0x42      word     skillPoints                confirmed
 +0x46      dword    gold                       confirmed
-+0x4A..56  word[7]  base attributes            confirmed  CORRECTED 2026-10-01, was "unidentified, NOT the resistances": +0x4A..+0x54 are the class's base strength .. charisma, CalcResults 0x00579AD1 grows each by base * (level - 1) / 10; live and in three hero files (Dwarf 26, 18, 25, 24, 0, 8). +0x54 is the seventh word, not used by that formula.
++0x4A..54  word[6]  base attributes            confirmed  CORRECTED 2026-10-01, was "unidentified, NOT the resistances": +0x4A..+0x54 are the class's base strength .. charisma, CalcResults 0x00579AD1 grows each by base * (level - 1) / 10; live and in three hero files (Dwarf 26, 18, 25, 24, 0, 8). The row once said word[7] to +0x56, which is the level.
 +0x56      word     level                      confirmed
 +0x59      byte     last combo                 confirmed  slot + 1 of the combo whose chain is running or just ran, 0 otherwise; written by the art cooldown step 0x00562720. Live 2026-09-26: 1 then 2 while the combos in slots 1 and 2 ran, back to 0 a second later.
 +0x5A..E6  float[]  derived-stat block         confirmed  2-BYTE ALIGNED: a dword-aligned dump shows garbage.
