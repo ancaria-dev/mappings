@@ -185,6 +185,15 @@
 0x00812440  0x412440   WindowProc (the menus')             stdcall(hwnd, msg, wparam, lparam)       static     [key=wndProcMenu hooked] The procedure RegisterClassExA installs (0x0081340F) and the one the window has until a world starts; the same message handling as 0x00811270 with the kernel route 1. Entry mov eax, fs:[0], 6 bytes; branch_targets_into: 0 fatal. Hooked live 2026-09-27 for ten minutes inside a world: zero calls, which is what the swap predicts.
 0x00612160  0x212160   cEngine cursor draw                 thiscall(engine)(device, int pass)       confirmed  [key=cursorDraw hooked] Draws the mouse cursor (the MOUSE_*.TGA textures, 0x00612B49) inside the frame's scene. The frame loop calls it twice: pass 0 before the UI (0x0060ECB7) and pass 1 after cUI_Manager's render 0x00758BC0 (0x0060ECF1). Pass 1 is where Coderpack draws its overlay: above the world and every window, under the cursor. Entry push -1, SEH, 2 bytes then 5; branch_targets_into: 0 fatal. Live 2026-09-27: 2 calls a frame, pass 1 exactly once per flip; a D3D7 quad drawn at pass 1 showed over the inventory and the esc menu with the cursor on top, 5.6 us a frame on average.
 0x00758BC0  0x358BC0   cUI_Manager::render                 thiscall(manager)(IDirect3DDevice7*)     confirmed  [key=uiRender hooked] Draws every window and the HUD (the taskbar +0x80 at 0x00759115, the minimap +0x98 at 0x00759145, the text lines, the letterbox bars) inside the frame's scene; returns at once while [0x0182DDB8] & 0x20000. Two callers: the engine frame 0x0060ECC4, after the world, its z-buffer clear (0x0060ECA4) and cursorDraw pass 0, and the menu thread's frame 0x00756EB1. There is no point between the HUD and the windows. Entry mov eax, fs:[0], 6 bytes; branch_targets_into: 0 fatal. Live 2026-09-28: once a frame, 77 to 80 calls a second in the world. Coderpack draws a layer of the world plane at its entry: above the world, under the HUD and every window.
+0x00753430  0x353430   cUI_Static2::render                 thiscall(control)(IDirect3DDevice7*)     confirmed  Vtable 0x0089669C slot 5; ret 4. Returns unless [ctrl+0x10] & 1 and not ([0x0182DDB8] & 0x20000). Resolves the handle [ctrl+0x78] with 0x0065F220 (0x00753470) and SetTexture; the absolute rectangle from 0x00731F80; one FVF 0x1C4 strip (0x00753627) in colour +0x14 with the UVs +0x54..+0x60. Layout under STRUCTURES (cUI_Static2). Entry sub esp, 0xB0 (6 bytes), push ebx; branch_targets_into: 0 fatal, 8 benign (direct calls from subclasses). Live 2026-09-30: about 10500 calls a second in the main menu's options (315977 in 30 s).
+0x007533A0  0x3533A0   cUI_Static2 constructor             thiscall(control)(...)                   static     213 call sites. Copies the UVs +0x54..+0x60 from a UI sprite record's +0x2C (table 0x009EBEA8).
+0x00731730  0x331730   cUI_Control2 constructor            thiscall(control)(...)                   static     Copies the control name, char[32], to +0x30.
+0x00731F80  0x331F80   cUI_Control2 absolute rectangle     thiscall(control)(...)                   static     x and y summed from +0x24 / +0x28 up the parent chain at +0x50; int16 width and height at +0x2C / +0x2E.
+0x0072B1F0  0x32B1F0   cUI_Button2::render                 thiscall(control)(IDirect3DDevice7*)     confirmed  Vtable 0x00896308 slot 5; ret 4. Pushed (flags & 0x10): handle +0x80, UVs +0x54..+0x60; released: handle +0x84, UVs +0x64..+0x70. Border records +0x90 / +0x94 pushed, +0x98 / +0x9C released (0x0072B3C2). Layout under STRUCTURES (cUI_Button2). Entry sub esp, 0x1BC (6 bytes), push esi; branch_targets_into: 0 fatal, 0 benign. Live 2026-09-30: 19330 calls in 30 s.
+0x00725360  0x325360   cUI_Window2 frame builder           thiscall(window)(...)                    static     Builds UI_STATIC_FRAME and UI_STATIC_TEXTBAR from UI sprite records 276..279 and 290..321 and GUI_main_13's 342..346 (table 0x009EBEA8; the save window's pieces are listed there). 63 call sites.
+0x0073AA20  0x33AA20   cUI_Frame border builder            thiscall(frame)(...)                     static     Builds the UI_STATIC_FRAMEELEMENT pieces from the UI sprite record indices [frame+0xAC], [frame+0xB0] and [frame+0xB4].
+0x007272A0  0x3272A0   cUI_Window2::render                 thiscall(window)(IDirect3DDevice7*)      static     Calls each child's vtable slot 5 (return site 0x007272F8), so it reaches cUI_Static2::render and cUI_Button2::render.
+0x0073A9B0  0x33A9B0   cUI_Frame::render                   thiscall(frame)(IDirect3DDevice7*)       static     Calls each child's vtable slot 5 (return site 0x0073A9E5).
 0x006554E0  0x2554E0   getMouse                            cdecl() -> mouse*                        static     The mouse singleton at [0x00CDCADC]; layout under STRUCTURES (mouse).
 0x006559D0  0x2559D0   mouse::draw                         thiscall(mouse)(IDirect3DDevice7*, bool) confirmed  [key=cursorShapeDraw hooked] Draws the cursor's current shape [mouse+0x64] at [mouse+4], [mouse+8], under the lock at +0x24, and nothing when the shape is NULL. The only cursor draw: cursorDraw pass 1 at 0x0061315A (after pushing the hover shape, popped at 0x00613166) and 0x00613181, and the menu thread at 0x00756F17, after the UI and before endScene 0x00756F35. No flag hides the cursor; both window procedures answer WM_SETCURSOR with SetCursor(NULL). Entry push esi / mov esi, ecx / push edi / lea edi, [esi+0x24], 7 bytes; branch_targets_into: 0 fatal. Live 2026-09-28: once a frame, 77 to 80 calls a second. Coderpack hides the cursor over a layer by clearing +0x64 for the call and restoring it after, and draws the top plane's layers here in menu frames, under the cursor.
 0x00654C60  0x254C60   mouse shape constructor             thiscall(shape)(int tex, word flags)     static     The 0x2C-byte shape push 0x006555E0 allocates (0x00655605); layout under STRUCTURES (mouse shape). UVs 0,0,1,1 (0x00654C86..0x00654C8F), offset and size 0. Flag 2: tex is an item type id drawn as a model, its offset from the type's cell size (0x00654CE3).
@@ -580,7 +589,24 @@
 
 # cUI_Window2 (every window; controls share the first part through cUI_Control2)
 +0x10      dword    flags                      confirmed  Bit 0 visible.
-+0x30      char[]   name                       confirmed  UI_MAINMENU, UI_WND_INVENTORY, ... Read in onShow live.
++0x24      int32    x                          static     Relative to the parent; 0x00731F80 sums it up the chain.
++0x28      int32    y                          static     As x.
++0x2C      int16[2] width, height              static     Read by 0x00731F80.
++0x30      char[]   name                       confirmed  UI_MAINMENU, UI_WND_INVENTORY, ... Read in onShow live. char[32], copied by the cUI_Control2 constructor 0x00731730.
++0x50      ptr      parent                     static     The chain 0x00731F80 walks for the absolute position.
+
+# cUI_Static2 (vtable 0x0089669C, render 0x00753430), on top of cUI_Control2
++0x14      dword    colour                     static     The strip's diffuse colour.
++0x54      float[4] u0, u1, v0, v1             static     In this order: u0 +0x54, u1 +0x58, v0 +0x5C, v1 +0x60; the constructor 0x007533A0 copies them from a UI sprite record's +0x2C.
++0x78      dword    texture handle             static     For 0x0065F220.
+
+# cUI_Button2 (vtable 0x00896308, render 0x0072B1F0), on top of cUI_Control2
++0x54      float[4] pushed UVs                 static     Drawn while flags & 0x10.
++0x64      float[4] released UVs               static
++0x80      dword    pushed texture handle      static
++0x84      dword    released texture handle    static
++0x90      dword[2] pushed border records      static     +0x90 and +0x94, the border pieces from the UI sprite table (0x0072B3C2).
++0x98      dword[2] released border records    static     +0x98 and +0x9C.
 
 # World sector records: [world+0x268] begin, +0x26C end, 16 bytes each, world = [[0x00AD4BC0]]; 0x00634580 returns one by index.
 +0x0A      byte     flags                      static     The chest click reads the record at [chest+0x34]: bit 1 set sends the take message with [ev+0x10] = 1 (the loot drops), clear sends 2 (a sound, nothing drops); [chest+0x34] = 0 sends no take at all (0x0053C53A). Live 2026-09-27: barrel 1232 had 2425 there and dropped its loot.
