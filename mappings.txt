@@ -116,7 +116,8 @@
 0x00424C10  0x024C10   getPlayingTime                     thiscall(cStats)(int* h, int* m, int* s) confirmed  Reads +0x56F8 / +0x56FC / (+0x5700 / 1000).
 0x004249D0  0x0249D0   getWorldDiscovered                 thiscall(cStats)(int) -> float           static     +0x56EC / total.
 0x00424650  0x024650   getSecondsSinceDeath               thiscall(cStats) -> int                  confirmed  +0x570C / 1000.
-0x00424D30  0x024D30   cStats::setFlag                    thiscall(cStats)(int index, byte value)  static     Stores byte [cStats+0x5704+index] for index < 6, else nothing. ret 8. cEngine::load sets flag 4 from the save header field its own log calls "hardcore"; the hero load 0x00605DF0 sets it too.
+0x00424D30  0x024D30   cStats::setFlag                    thiscall(cStats)(int index, byte value)  static     Stores byte [cStats+0x5704+index] for index < 6, else nothing. ret 8. cEngine::load sets flag 4 from the save header field its own log calls "hardcore"; the hero load 0x00605DF0 sets it too. CORRECTED 2026-10-01: flag 4 is how often Niobium was completed, not hardcore (see +0x5704 under cStats); the log's "hardcore" label is stale.
+0x00424CF0  0x024CF0   cStats::incFlag                    thiscall(cStats)(int index)              static     Adds 1 to byte [cStats+0x5704+index] (index < 6, stops at 0xFE). ret 4. Callers: the finale's script command (0x004AEE30) with the current difficulty [0x0182DDC4], and the console cheats bronze, silver, gold, platin, niob (0x00615F65, 0x00615FCD, 0x00616035, 0x0061609D, 0x00616109) with 0..4.
 0x00424670  0x024670   cStats::setSecondsSinceDeath       thiscall(cStats)(int seconds)            static     [cStats+0x570C] = seconds * 1000; the counterpart of getSecondsSinceDeath. cEngine::load calls it from the save.
 0x00424C40  0x024C40   setOpponentsDefeated               thiscall(cStats)(int)                    confirmed  ONLY called from save/load (0x00605DF0), useless as a hook.
 0x00424C50  0x024C50   setResurrections                   thiscall(cStats)(int)                    confirmed  Same caveat.
@@ -490,8 +491,8 @@
 +0x56F8    dword    playTimeHours              confirmed
 +0x56FC    dword    playTimeMinutes            confirmed
 +0x5700    dword    playTimeMillis             confirmed
-+0x5704    byte[6]  flags                      static     Written only through cStats::setFlag.
-+0x5708    byte     hardcore (flag 4)          static     The save header's "hardcore" field, per cEngine::load's log. Single player starts every new hero with hardcore off.
++0x5704    byte[6]  completed difficulties     static     CORRECTED 2026-10-01, was "flags, written only through setFlag": byte d counts how often difficulty d (0 Bronze .. 4 Niobium) was completed. incFlag 0x00424CF0 raises it when the finale in Shaddar-Nur ends (0x004AEE30, the current difficulty) and on the console cheats bronze .. niob; loads set it (setFlag). The hero select, where it limits difficulties (screen mode 7, 0x006F4ED0), offers up to one above the highest completed; pureHD offers every difficulty regardless (seen 2026-10-01 on a hero with no byte set). Byte 5 is not set by any code; the hero card's +0xF2 plays its part.
++0x5708    byte     Niobium completed (flag 4) static     CORRECTED 2026-10-01, was "hardcore" after cEngine::load's log line: the console cheat niob and the finale on Niobium raise it (0x00424CF0), and nothing but the save and the hero card reads it (getFlag's callers 0x0060499C, 0x0061AB40).
 +0x570C    dword    millisSinceLastDeath       confirmed  Zeroed by incrementResurrections; drives the survival bonus.
 +0x5710    word     ?                          static     Written to hero file section C4 +0x0C; 76 in one file, 0 in two.
 +0x5720    byte[3]  creation date              static     Set once from the local clock by 0x00423F50: year's low byte + 0x44, month, day. Hero file section C4 +0x1C holds day, month, year byte.
@@ -818,7 +819,7 @@
 +0x7C     dword    0xBAADF00D                 confirmed
 +0x80     dword    cheat flag                 static     Byte [0x0182DDD0].
 +0x84     dword    difficulty                 confirmed  To [0x0182DDC4] on load: 0 Bronze .. 4 Niobium.
-+0x88     dword[5] cStats flags 0..4          static     getFlag 0x00424D10 on save, setFlag 0x00424D30 on load; flag 4 is hardcore (the log's hardcore[%d]).
++0x88     dword[5] cStats flags 0..4          static     getFlag 0x00424D10 on save, setFlag 0x00424D30 on load; flag d is how often difficulty d was completed, 4 Niobium (CORRECTED 2026-10-01: once read as hardcore after the log's hardcore[%d]).
 # sections read by Coderpack (by id, through the table):
 # 0x83    char[64] the save name (engine +0x6A): QUICKSAVE, <empty> from a menu save left unnamed.
 # 0x95    wchar[]  the load menu's line, Date[d/ m/yyyy] Time[h.mm], from the calendar.
@@ -860,7 +861,7 @@
 +0x88     dword    19                         static     The number of equipment slots that follow.
 +0x8C     dword[19] item type by slot         static     Type id of the item in each equipment slot, 0 when empty. +0xD4 is overwritten afterwards (0x00604B8B).
 +0xEC     byte     difficulty at export       static     [0x0182DDC4]: 0 Bronze .. 4 Niobium.
-+0xED     byte[5]  cStats flags 0..4          static     getFlag 0x00424D10; flag 4 is hardcore. With +0xF2 they are the six bytes the hero select reads for the difficulties it offers (0x006F4ED0).
++0xED     byte[5]  cStats flags 0..4          static     getFlag 0x00424D10; flag d counts completions of difficulty d, 4 Niobium (once read as hardcore). With +0xF2 they are the six bytes the hero select reads for the difficulties it offers (0x006F4ED0).
 +0xF2     byte     unlock every difficulty    static     Not written by fillHeroCard. Set, the hero select offers every difficulty (0x006F4ED0, 0x0070FDF0), which is what Sacred CharModif's "all difficulty levels unlocked" writes.
 +0xF3     byte     hero flag                  static     [0x0182DDD0], cleared when resurrections > 1.
 +0xF9     byte     resurrections              static     cStats +0x56F4, capped at 255.
