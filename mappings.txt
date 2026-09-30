@@ -141,6 +141,19 @@
 0x005FC300  0x1FC300   cObjectManager::destroy            thiscall(mgr)(int ref, ...)              confirmed  [key=objDestroy hooked] 0-68 calls/s. Read the object on enter, it is gone on leave. Same switching as objCreate. Entry is `mov eax, fs:[0]`.
 0x00603260  0x203260   cObjectManager::load               thiscall                                 confirmed  [key=worldLoad hooked] Logs "%d objects (freeslot=%d)". Hook the ENTRY only; the body is the ~3000-object loop.
 0x00605DF0  0x205DF0   loadHero / hero (de)serialize      thiscall                                 confirmed  [key=heroLoad hooked] Runs on load AND on save, so report what changed, do not assume a direction. CAUTION, live 2026-09-28 (research load_stages.py): all 49 calls of a session came from 0x0061D552 in 0x0061D470 (callers 0x0060C17C in cEngine::cEngine next to "Save\Hero%.2d.pax", and the menu 0x0070C18C), in batches of 3 to 9: at start-up, on every return to the main menu and at the end of each world build. None ran inside cEngine::load or a quickload. It looks like the hero slots' preview read, so it is NOT a sign that a hero entered the world.
+0x0061D470  0x21D470   readHeroFile                       cdecl(char* path, int mode, card* out) -> bool static     Reads an exported hero (Save\HeroNN.pax, layout under STRUCTURES "hero file"): opens the file with 0x0065B390 (fails -> false), then runs 0x00605DF0 on it. mode 0 is the hero select's preview (0x0070C18C, fills the 0x22C-byte card at out), 1 the world start in cEngine::cEngine (0x0060C17C), 2 the console command "loadplayer" (0x00614F51). The only check on the file is its magic "AMH" (0x00605E6A): no version, size or checksum test.
+0x0061D080  0x21D080   writeHeroFile                      cdecl(char* path) -> bool                static     Exports the local hero: creates .\Save, serialises the hero with 0x00604BE0 into a 0xE0000-byte memory stream, then opens path for writing (0x0065B760) and writes the stream (0x0065B870) straight over the old file: no backup, no temporary file. Callers: cUI_Character::executeAction action 6 (0x0070E18E, path "Save\Hero%.2d.pax" from the chosen slot) and a network path (0x007F3131).
+0x00604BE0  0x204BE0   saveHero (ItemDataMgr::saveHero)    cdecl(stream*, name*, ...) -> bool      static     Writes a hero file: the header (0x00604DA6: "AMH", 0x1B, 16 sections, 0x22C, language [0x017E6CB4] at +0x1C, exe version at +0x28), a 16-entry table, then C0 the hero (creature serialiser, compressed to C7), C1 the bag (-> CA), C6 inventory 0x11 (-> CB), C2 every carried object (-> C8), C3 the card (0x00604850), C4 0x40 bytes of cStats (its table entry says 0x22C), CC the map (-> CD), CE 0x64 bytes of cStats +0x5724. Weapon hand slots 12, 13 and 18 are skipped when it collects the equipment's refs; the horse and its gear are collected too.
+0x00604850  0x204850   fillHeroCard                       cdecl(int ref, name*, card*, bool)       static     Fills the 0x22C-byte hero card (section C3 of a save and of a hero file); layout under STRUCTURES "hero file".
+0x00607A70  0x207A70   packSection                        cdecl(stream*, entry*) -> bool           static     Compresses the section from entry.offset to the stream's end in place: zlib level 9 (0x00665130), a 32-byte header 0xBAADC0DE, packed length, 24 zero bytes, then the stream. entry.size becomes the unpacked length and entry.id the packed id from the table at 0x00890EDC. 0x00607B90 is its reverse.
+0x00607B90  0x207B90   unpackSection                      cdecl(stream*, entry*, ...) -> bool      static     The reader's side of packSection: maps a packed id back through 0x00890EDC and inflates.
+0x00665130  0x265130   zlib compress2                     cdecl(dst, dstLen*, src, srcLen, level)  static     zlib "1.2.1" (0x00962B28).
+0x0054B7D0  0x14B7D0   cCreature::serialize               thiscall(creature)(stream*, bool write, int) static     Vtable slot 7 of cCreature (0x00890184). Write order: cObject3D 0x00450000 (0xF7 bytes), 0xC0DEF00D, +0xFC (0x54), +0x150 (0x54), the 19 equipment refs (+0x1A4, refs of destroyed objects zeroed), +0x1F0 (0xFD), +0x2ED (0xAD), +0x570 (4), +0x574 (2), +0x578 (4), a word and three dwords of 0, the sheet (0x00585510), a dword-counted vector of 18-byte records (+0x39C), one of 68-byte records (+0x588), and 0x1B8 + 4 bytes from 0x00AD2C60 / 0x00AD2B48 when +0x200 has bit 0x40. The length this gives matched the three hero files and a horse byte for byte (research static/dump_pax.py).
+0x00450000  0x050000   cObject3D::serialize               thiscall(object)(stream*, bool write, int) static    The part every world object writes first, 0xF7 bytes from 0xFEEDF00D: +0x0A the object's ref, +0x0E its type id.
+0x005C7B00  0x1C7B00   cItemBase::serialize               thiscall(item)(stream*, bool write, int)  static    cObject3D's part, 0xBAADC0DE, byte n, n socketed items of 0x82 bytes, the item's own 0x82 bytes (item +0x118), then 0, 0 and 0xBAADC0DE. Armour 0x005BAD70, cBsItem3D 0x005C9AC0, potions 0x005CBF30 and runes 0x005CD950 add nothing.
+0x005CF5E0  0x1CF5E0   cWeapon3D::serialize               thiscall(item)(stream*, bool write, int)  static    cItemBase's part, then 0xBAADF00D and item +0x19C, +0x1AC, +0x1A0, +0x1BC (a dword each). Sacred Item Manager read these 20 bytes as an empty item.
+0x005DDF00  0x1DDF00   cInventoryEntry::serialize         thiscall(entry)(stream*, bool write, int) static    +0x1160, +0x1162, +0x1164, +0x1166, +0x115C width, +0x115E height (words), +0xD5C (0x400), the 256 cells (+0x18, 0xC00), weapon sets (+0xC18, 0x78), taskbar art slots (+0xC90, 0xC8), +0xD58 (4), +0x1168 (4), a dword-counted vector of 8-byte records (+0), one of 4-byte records (+0xC).
+0x0070C110  0x30C110   cUI_Character::readHeroSlots       thiscall(char)(int)                      static     The hero select's slot list: slots 0..7 (cmp ebx, 8 at 0x0070C2E0), each "SAVE\HERO%.2d.PAX" read with readHeroFile mode 0. A slot above 7 is never read. Called from 0x0070C310 and 0x0070C9C0, the screen's mode switches, so the files are read again each time the screen changes mode; a file changed while the screen shows is seen at the next switch (not checked live).
 0x005FBF90  0x1FBF90   cObjectManager::createByType       thiscall(mgr)(int type, pos*, int ref, int bc, int x) -> ref confirmed  [key=createByType] ret 0x14. How the game makes an object at a place: 0x00425EA0 on the type, create(type, ref, 0, x) (0x005FBA80), then place(ref, pos) (0x005FD200), which destroys the object again when the place is refused (0x00607920). Returns the new ref or 0. The fourth argument only matters while [0x0182DB6C] is set (a network flag) and is 0 in single player; the third is the ref to restore, 0 for new. pos is the 16-byte position of an object at +0x18: word sector, dword x, dword y, byte z layer. Every creature the game makes in play comes this way, and each caller then finds it with objectByIndex plus a dynamic_cast to cCreature and sets its level with 0x00565010 (exact 1): summons (0x005406F1 type 0x47, 0x00510CB8 type 0x254, 0x005BC3ED), the script ambush (0x004A0C0F) and the quest NPC setup (0x00462584). Live 2026-09-26, called from the engine tick with the hero's position record and new x/y, (type, pos, 0, 0, 0): eleven creatures of ten types appeared where asked (goblins, orc, skeleton, zombie, bear, troll, wolf, dragon), each with its own AI; the user fought and killed a dragon and a goblin made this way. A creature made alone stays a blank: level 1, 100 HP, whatever its type.
 0x005FD200  0x1FD200   cObjectManager::place              thiscall(mgr)(int ref, pos*) -> bool     static     Puts an object made by create into the world at pos. Calls the world's sector fix (0x00636070) on pos first and refuses a point that has no sector.
 0x00636070  0x236070   world::fixSector                   thiscall(world)(pos*) -> bool            confirmed  [key=fixSector] ecx = [[0x00AD4BC0]]. Keeps the pos's sector word when that sector holds the point (0x00622D80), otherwise looks the sector up from x and y (grid 128 x 128 of 64-unit cells, table +0x284) and writes it back. Returns sector != 0. So a caller may pass any sector, 0 included. Live 2026-09-26: createByType got the hero's position record with other x and y and the sector left as the hero's, and every creature stood at the point asked.
@@ -435,6 +448,7 @@
 +0x578     dword    portals opened             static     On the hero: the mask the game saves as "portals[%x]" (ItemDataMgr::saveHero, 0x00604DF2) and hands the portal list, which copies it to dialog +0x170. Bit i is entry i of the Ancaria list (mode 5), bit 14 + i entry i of the Underworld list (mode 6, 0x007214E0). Bits 13 and 27 are UI_PORTAL_ISLE: in a network game the list ORs 0x88002000 into its copy and shows 14 entries; in single player it ANDs 0x77FFDFFF and shows 13 (0x0072127E). Written by portalUnlock (OR) and at hero creation (0x0052E3DD).
 
 # sheet (= full + 0x3A8)
++0x08      dword    class                      static     HeroClass id; what the hero files hold at section C7 0x3DD.
 +0x0C      dword    experience                 confirmed
 +0x10      word     strength                   confirmed
 +0x12      word     endurance                  confirmed
@@ -443,6 +457,7 @@
 +0x18      word     mentalRegeneration         confirmed
 +0x1A      word     charisma                   confirmed
 +0x23      byte     attributePoints            confirmed
++0x24      byte[8]  skill ids, one per slot    static     1..33, modifier id - 599 (1 Heavenly Magic .. 33 Forge Lore), 0 for an empty slot. Read from the three hero files, where each class held its own skills (Seraphim 14, 2, 4, 10, 12, 11, 1, 25).
 +0x2C..    byte[]   skills, one per slot        confirmed  UI order, up to 8, set is class-dependent.
 +0x3C      word     attackSpeedBase            confirmed  Matches the "Attack Speed" row.
 +0x40      word     movementSpeed              confirmed  Matches the "Movement Speed" row (164).
@@ -803,6 +818,53 @@
 #         +8 wchar[] the hero's name (0x0044A600, the class name when the hero has none). Daemon level 161
 #         in GAME00, Battle Mage level 14 in GAME10.
 
+# hero file (Save\HeroNN.pax, nn = the slot 00..07; the name's case varies, hero06.pax on this machine).
+# Written by writeHeroFile 0x0061D080 / saveHero 0x00604BE0, read by readHeroFile 0x0061D470 / 0x00605DF0.
+# Offsets into the file, compared 2026-10-01 with Hero00, hero06 and hero07 on this machine (research
+# static/dump_pax.py); the hero select showed the name, class and level the card holds for all three.
+# The format was first described by Sacred CharModif 0.15.0.16 (LinkZ) and Sacred Item Manager (sonicmouse).
++0x00     char[3]  magic                      confirmed  "AMH". The only thing the game's reader checks.
++0x03     byte     format version             static     0x1B.
++0x04     dword    section count              static     0x10: the table has 16 entries (a save has 64).
++0x08     dword    0x22C                      static
++0x1C     dword    game language              static     [0x017E6CB4].
++0x20     dword    ?                          static     0x0066EAD0; 11 and 9 in the files.
++0x24     dword    2                          static
++0x28     dword    executable version         static     20011 or 20000 (2.0.11, 2.0.0), as in a save.
++0x100    struct[16] section table            static     u32 id, u32 offset, u32 size; id 0 unused. Entries 0..5, 8, 9 hold C7, CA, CB, C8, C3, C4, CD, CE; the data starts at 0x1C0. A compressed section starts 0xBAADC0DE, packed length, 24 zero bytes, then zlib; its size is the unpacked length.
+# sections (ids as stored)
+# 0xC7    the hero: 0x10 bytes of creature +0x18, then cCreature::serialize 0x0054B7D0. The sheet's +0x08..+0xF5
+#         sits at section offset sheet + 0x3D5, so object offsets are +0x2D (experience 0x3E1, gold 0x41B, level
+#         0x42B, attributes 0x3E5, skill ids 0x3F9, skill levels 0x401). Equipment refs at 0x1B3. At 0x4CB a word
+#         count and the 22-byte combat art records, then a word count and the 38-byte combos.
+# 0xCA    the bag (inventory entry 1), 0xCB inventory entry 17 (20 x 10, empty in every file): cInventoryEntry::serialize
+#         0x005DDF00. Cells at 0x40C (12 bytes: ref, bits, w, h, word type), weapon sets at 0x100C, taskbar art slots
+#         at 0x1084, selected set and slot at 0x114C.
+# 0xC8    u32 count, then per entry a u32 type (0 none) and the object: an item (cItemBase 0x005C7B00, a weapon adds
+#         20 bytes, 0x005CF5E0) or the hero's horse (a creature). Equipment and cells refer to an object by the old
+#         ref at its +0x0A.
+# 0xCD    0xC8E28 bytes of map (0xB00BB00B, a count, per entry 8 bytes and 0x80 bytes or 8 bytes 0xDEADB00B).
+# 0xCE    0x64 bytes of cStats +0x5724.
+# 0xC3, the hero card (0x22C bytes, fillHeroCard 0x00604850); offsets into the section:
++0x00     dword    level                      confirmed  The hero select showed 65, 29, 29 for the three files.
++0x04     dword    class                      confirmed  HeroClass id: 1 Seraphim, 8 Dwarf, 9 Daemon, as the hero select showed.
++0x08     wchar[64] name                      confirmed  The class's name for a hero never renamed ("Seraphim", "Dwarf", "Daemon").
++0x88     dword    19                         static     The number of equipment slots that follow.
++0x8C     dword[19] item type by slot         static     Type id of the item in each equipment slot, 0 when empty. +0xD4 is overwritten afterwards (0x00604B8B).
++0xEC     byte     difficulty at export       static     [0x0182DDC4]: 0 Bronze .. 4 Niobium.
++0xED     byte[5]  cStats flags 0..4          static     getFlag 0x00424D10; flag 4 is hardcore.
++0xF3     byte     hero flag                  static     [0x0182DDD0], cleared when resurrections > 1.
++0xF9     byte     resurrections              static     cStats +0x56F4, capped at 255.
++0xFA     byte     mode bits                  static     Bit 0 set by the creature's vcall +0x24(0x24); 0x10/0x20/0x40 network kinds, 0x80 single player (0x80 in every file).
++0xFC     dword    experience                 static     Object +0x3B4.
++0x100    dword    gold                       static     Object +0x3EE.
+# 0xC4, statistics (0x40 bytes written, the table says 0x22C); offsets into the section:
++0x00     dword    resurrections              static     cStats +0x56F4.
++0x04     dword    opponents defeated         static     cStats +0x56F0.
++0x08     dword    seconds since death        static     cStats +0x570C / 1000, what the survival bonus grows with.
++0x0C     dword    cStats +0x5710 (word)      static     76 in Hero00, 0 in the others.
++0x10     dword[3] playing time h, m, s       static     getPlayingTime 0x00424C10.
++0x1C     byte[3]  creation date              static     Day, month, (year - 0x700 + 0x44) & 0xFF: cStats +0x5722..+0x5720 set from GetLocalTime once (0x00423F50). 2024-10-06 in Hero00, 2005-03-07 in the others.
 # cMSS, the Miles sound manager ([0x017E8F24], getSoundManager 0x00677750).
 
 # OFFSET   TYPE     NAME                       CONF       NOTES
@@ -891,6 +953,8 @@
 +0x152+2i  word     modifier flags             static     Read as the first word of each line by the tooltip (block +0x3A); (high byte & 0xF) is the hero class the bonus is for: through the tooltip line builder 0x100 gave "Seraphim Attack Speed: +30", 0x200 "Gladiator ...", 0x900 on the user's sword "Daemon Attack Speed: +20", 0xF00 "All ..."; 0x1000..0x8000 changed nothing visible. Seen 0x4000 and 0x8000 on the second modifier of two items, 0 elsewhere.
 #          the modifier dword at +0x162+4i is id | param << 16: 0x00050323 is 803 with param 5, which the tooltip reads as "+15% Mental Regeneration" (param = attribute index). Writing only the low word keeps an old param. The param counts 1 Strength, 2 Dexterity, 3 Endurance, 4 Physical Regeneration, 5 Mental Regeneration, 6 Charisma (809 with 1..6 through the line builder); 0 and 7 name none. Ids with text, from the same builder over 1..4095: 1..72 spells and combat arts, 600..632 skills, 801..868 item bonuses, 1000..1103 melee combat arts.
 +0x1E0     dword[]  socket-related             suspect    helmet "(0/3)" has three entries here, bracer "(0/1)" has one dword = 1; layout not settled
++0x124     byte[]   socket kinds               suspect    One byte per socket (item block +0x0C): 0 none, 1 bronze, 2 silver, 3 gold, 4 green, 5 platinum, from Sacred Item Manager's editor (github.com/sonicmouse/SacredGameTools). Not checked against this build.
++0x14A     word[4]  resistances                suspect    Physical, fire, magic, poison (item block +0x32..+0x38) per Sacred Item Manager's editor. Overlaps protection A (+0x14A) and B (+0x14E) above; which reading is right is not settled.
 # Set membership is a property of the TYPE, not the instance: a set sword
 # compared against 8 ordinary weapons had no unique field, and its type is its
 # own numbered entry (TYPE_WEAPON_2190) rather than a generic TYPE_WEAPON_SWORD.
@@ -924,6 +988,7 @@
 0x00AAAE98  quest table pointer                            static     [key=questTable] Records of 0x124 bytes, +0 the quest number. Searched by TriggerQuest and read by the quest-end function.
 0x00AD4BC0  object manager pointer                         confirmed  [key=objectManager] [[0x00AD4BC0]+4] = ref -> object table, +8 = end.
 0x00AAA564  item type table pointer                        confirmed  [key=itemTypes] Records of 0x80 bytes by type id (0 < id < 0x7E60), the family byte at +0x2E (itemTypeFamily 0x00426220). Read live over a loaded town's 3600 objects: family and RTTI class agree on every object (3 cCreature, 4 cChest3D for chests and barrels, 5 cWeapon3D, 8 cRing3D, 9 cPotion3D, 10 cObject3D doors, 12 cObjectFX, 13 cShield3D, 15 cSpecial3D gold and signposts, 28 cItemUpgrade runes). It is the TypeManager instance: initApp builds it (TypeManager::TypeManager 0x004257A0) and stores it at 0x008160BD. Live 2026-09-28 (spawned): 0 until that constructor, nonzero in its onLeave, 274 ms after the bar came on; set from progress "TextureLoader" on for the rest of the process.
+0x00890EDC  hero file section ids, plain -> packed          static     8 pairs of dwords read by packSection 0x00607A70 and unpackSection 0x00607B90: 8E A0, 91 A1, 96 A2, C0 C7, C2 C8, C1 CA, C6 CB, CC CD. A section written under the first id is stored compressed under the second.
 #          type record +0x00 dword flags, read live on creature types: 0x102 townsfolk and children, 0x8102 monsters, soldiers and the tavern wench alike, 0x4102 wolves and bears, 0x4004102 rabbits and horses (bit 0x04000000 only on the peaceful animals). Getters for single bits sit at 0x004263C0..0x00428660 (bits 1, 2, 5, 7, 8, 12, 17, 19..25). +0x09 byte: 31 monsters, 27 soldiers and thieves, 25 animals, 32 townsfolk; the same for friendly and hostile soldiers, so not the alliance.
 0x00AD33C8  inventory manager pointer                      confirmed  [key=inventories] 32 cInventoryEntry of 0x1180 bytes from the pointer (getInventories 0x005DF090). Read live: entry 1 is the hero's bag.
 0x00AD6734  rain timer (float)                             confirmed  Time of the NEXT rain change, both start and stop write it, so it is not an "is it raining" flag.
