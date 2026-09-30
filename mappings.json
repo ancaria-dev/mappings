@@ -117,6 +117,17 @@
     "videoPlayFile": "0x2A1700",
     "videoOpen": "0x2A0EF0",
     "videoPlay": "0x2A1010",
+    "soundByName": "0x2767E0",
+    "soundManager": "0x277750",
+    "soundPlay": "0x293680",
+    "soundStop": "0x297580",
+    "musicPlay": "0x294680",
+    "jinglePlay": "0x295150",
+    "fxEventInit": "0x1E1B0",
+    "fxHeight": "0x49D00",
+    "worldToSpace": "0x223D60",
+    "objFlags": "0x1FEA00",
+    "objPlace": "0x1FCE00",
     "regionEnter": "0x93070",
     "regionExit": "0x93420",
     "sectorEnter": "0x93DD0",
@@ -163,7 +174,9 @@
     "viewXFromX": "0xAD6710",
     "viewYFromX": "0xAD6714",
     "viewXFromY": "0xAD6720",
-    "viewYFromY": "0xAD6724"
+    "viewYFromY": "0xAD6724",
+    "soundTable": "0x963878",
+    "fxVtable": "0x89099C"
   },
   "hooked": [
     "getLocalHero",
