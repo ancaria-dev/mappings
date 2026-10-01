@@ -10,6 +10,8 @@
 
 # mappings
 
+[![Lines of code](https://img.shields.io/endpoint?url=https%3A%2F%2Fancaria.dev%2Ffiles%2Fbadges%2Fmappings.json)](https://github.com/ancaria-dev/mappings)
+
 Das Adressregister von Sacred Gold für alle, die dem Loader einen Hook
 hinzufügen oder den Code des Spiels untersuchen.
 
