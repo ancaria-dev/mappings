@@ -172,9 +172,12 @@ python mappings.generator.py --check    # выходит с кодом 1, есл
 
 ## Релизы
 
-У реестра нет релизов. Потребители читают `mappings.json` из `master` или с
-ревизии, закреплённой в `coderpack/.mappings-ref`. До игроков изменение
-доходит со следующим релизом coderpack, как описано в корневом
+Релиз — кнопка `Release` в Actions, в которую вы вводите версию. Workflow
+проверяет, что `mappings.json` актуален, и прикладывает его к GitHub Release.
+
+Затем [devops](https://github.com/ancaria-dev/devops) выпускает `agent`,
+который вшивает адреса в `addr.js`. До игроков изменение доходит с этим
+релизом агента. Подробности — в корневом
 [CONTRIBUTING](https://github.com/ancaria-dev/.github/blob/master/CONTRIBUTING.md).
 
 ## Лицензия

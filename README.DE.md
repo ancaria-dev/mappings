@@ -177,11 +177,15 @@ die VA unter `va`.
 
 ## Releases
 
-Das Register hat keine Releases. Die Nutzer lesen `mappings.json` von `master`
-oder von der Revision, die in `coderpack/.mappings-ref` festgelegt ist. Bei den
-Spielern kommt eine Änderung mit dem nächsten coderpack-Release an, wie in der
+Ein Release ist der Button `Release` in Actions: Du gibst eine Version ein,
+der Workflow prüft, ob `mappings.json` aktuell ist, und hängt die Datei an ein
+GitHub-Release.
+
+Danach veröffentlicht [devops](https://github.com/ancaria-dev/devops) `agent`
+neu, und `agent` backt die Adressen in `addr.js` ein. Bei den Spielern kommt
+eine Änderung mit diesem Agent-Release an. Details stehen in der
 [CONTRIBUTING](https://github.com/ancaria-dev/.github/blob/master/CONTRIBUTING.DE.md)
-im Wurzel-Repository beschrieben.
+im Wurzel-Repository.
 
 ## Lizenz
 

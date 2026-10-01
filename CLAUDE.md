@@ -33,6 +33,11 @@ Workspace rules, target build, and the no-typed-addresses rule: see `../CLAUDE.m
 - Keys start with a letter, then letters, digits, or underscores. Keys are unique. Of two rows with the same address, at most one carries a key.
 - Never write bare `[hooked]`. Never mark a single-address global `hooked`; it has no code to intercept.
 
+## Release
+
+- A release is the `Release` button (`release.yml`) with a version. It runs `--check` and attaches `mappings.json` to the GitHub Release. There are no version files.
+- `devops` then releases `agent`, whose `tools/addr.py` bakes the addresses into `src/gen/addr.js`. A registry change reaches players only through that agent release.
+
 ## Parser traps
 
 - Parsing starts at the first line beginning with `##`. An address row above it is silently ignored.

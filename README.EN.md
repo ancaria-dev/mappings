@@ -173,10 +173,15 @@ generator reads it as a single-address global and exports the VA under `va`.
 
 ## Releases
 
-The registry has no releases. Consumers read `mappings.json` from `master` or
-from the ref pinned in `coderpack/.mappings-ref`. A change reaches players
-through the next coderpack release, as described in the root
-[CONTRIBUTING](https://github.com/ancaria-dev/.github/blob/master/CONTRIBUTING.EN.md).
+A release is the `Release` button in Actions: you enter a version, and the
+workflow checks that `mappings.json` is current and attaches it to a GitHub
+Release.
+
+[devops](https://github.com/ancaria-dev/devops) then releases `agent`, which
+bakes the addresses into `addr.js`. A change reaches players with that agent
+release. The root
+[CONTRIBUTING](https://github.com/ancaria-dev/.github/blob/master/CONTRIBUTING.EN.md)
+has the details.
 
 ## License
 
