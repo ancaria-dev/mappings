@@ -118,8 +118,8 @@ path, `$CODERPACK_MAPPINGS`, the sibling `../mappings`, the cache at
 download uses the ref in `coderpack/.mappings-ref`, or `master` when that file
 is missing or empty.
 
-`coderpack/tools/addr.py` turns `rva` and `va` into
-`coderpack/agent/src/gen/addr.js`. An address typed by hand into agent code is
+`agent/tools/addr.py` in the [agent](https://github.com/ancaria-dev/agent)
+repository turns `rva` and `va` into `agent/src/gen/addr.js`. An address typed by hand into agent code is
 a bug.
 
 `coderpack/tools/hooksafe.py` disassembles the game at every name in `hooked`

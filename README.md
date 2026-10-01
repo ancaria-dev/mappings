@@ -117,8 +117,8 @@
 берётся ревизия из `coderpack/.mappings-ref`, а если файла нет или он пуст —
 `master`.
 
-`coderpack/tools/addr.py` превращает `rva` и `va` в
-`coderpack/agent/src/gen/addr.js`. Адрес, вписанный в код агента вручную, —
+`agent/tools/addr.py` превращает `rva` и `va` в `agent/src/gen/addr.js`
+в репозитории [agent](https://github.com/ancaria-dev/agent). Адрес, вписанный в код агента вручную, —
 ошибка.
 
 `coderpack/tools/hooksafe.py` дизассемблирует игру в каждой точке из `hooked`

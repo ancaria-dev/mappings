@@ -119,8 +119,8 @@ auf der Kommandozeile, `$CODERPACK_MAPPINGS`, das Nachbarverzeichnis
 Download von GitHub. Der Download nimmt die Revision aus
 `coderpack/.mappings-ref`, oder `master`, wenn die Datei fehlt oder leer ist.
 
-`coderpack/tools/addr.py` macht aus `rva` und `va` die Datei
-`coderpack/agent/src/gen/addr.js`. Eine von Hand in den Agenten geschriebene
+`agent/tools/addr.py` im Repository [agent](https://github.com/ancaria-dev/agent)
+macht aus `rva` und `va` die Datei `agent/src/gen/addr.js`. Eine von Hand in den Agenten geschriebene
 Adresse ist ein Fehler.
 
 `coderpack/tools/hooksafe.py` disassembliert das Spiel an jedem Namen aus
