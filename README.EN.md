@@ -112,17 +112,18 @@ then computes the exported RVA from the VA.
 
 ## Who reads it
 
-`coderpack/tools/paths.py` finds `mappings.json` in this order: a command-line
-path, `$CODERPACK_MAPPINGS`, the sibling `../mappings`, the cache at
+`agent/tools/paths.py` finds `mappings.json` in this order: a command-line
+path, `$AGENT_MAPPINGS`, the sibling `../mappings`, the cache at
 `build/mappings/mappings.json`, and finally a download from GitHub. The
-download uses the ref in `coderpack/.mappings-ref`, or `master` when that file
-is missing or empty.
+download uses the ref in `agent/.mappings-ref`, or `master` when that file is
+missing or empty. The `coderpack` generators look in the same order, with
+`$CODERPACK_MAPPINGS` as the variable.
 
 `agent/tools/addr.py` in the [agent](https://github.com/ancaria-dev/agent)
 repository turns `rva` and `va` into `agent/src/gen/addr.js`. An address typed by hand into agent code is
 a bug.
 
-`coderpack/tools/hooksafe.py` disassembles the game at every name in `hooked`
+`agent/tools/hooksafe.py` disassembles the game at every name in `hooked`
 and reports trampoline hazards. A branch into the patched bytes, a
 flag-setting instruction cut off from its branch, and overlapping hooks are
 fatal. It also warns about relocated control flow, ESP-relative instructions,
@@ -134,9 +135,9 @@ on that next instruction. Hooking it crashed the game whenever a character
 with an empty skill slot loaded. It took three game restarts to find by hand.
 The safe site is `+0x1827DE`.
 
-`launcher/tools/build.ps1` regenerates `addr.js` while it stages a coderpack
-source build. It passes `$Mappings` only when that path holds
-`mappings.json`. Otherwise coderpack falls back to its usual lookup order.
+`agent/tools/install.ps1` regenerates `addr.js`, packs the agent, and
+installs it into the game. A sibling `../mappings` wins over the download, so
+a registry change reaches your game before any release.
 
 ## Building
 

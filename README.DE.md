@@ -113,17 +113,18 @@ aus der Zeile und berechnet den exportierten Wert dann aus der VA.
 
 ## Wer das Register liest
 
-`coderpack/tools/paths.py` sucht `mappings.json` in dieser Reihenfolge: ein Pfad
-auf der Kommandozeile, `$CODERPACK_MAPPINGS`, das Nachbarverzeichnis
+`agent/tools/paths.py` sucht `mappings.json` in dieser Reihenfolge: ein Pfad
+auf der Kommandozeile, `$AGENT_MAPPINGS`, das Nachbarverzeichnis
 `../mappings`, der Cache unter `build/mappings/mappings.json` und zuletzt ein
-Download von GitHub. Der Download nimmt die Revision aus
-`coderpack/.mappings-ref`, oder `master`, wenn die Datei fehlt oder leer ist.
+Download von GitHub. Der Download nimmt die Revision aus `agent/.mappings-ref`,
+oder `master`, wenn die Datei fehlt oder leer ist. Die Generatoren von
+`coderpack` suchen in derselben Reihenfolge, nur mit `$CODERPACK_MAPPINGS`.
 
 `agent/tools/addr.py` im Repository [agent](https://github.com/ancaria-dev/agent)
 macht aus `rva` und `va` die Datei `agent/src/gen/addr.js`. Eine von Hand in den Agenten geschriebene
 Adresse ist ein Fehler.
 
-`coderpack/tools/hooksafe.py` disassembliert das Spiel an jedem Namen aus
+`agent/tools/hooksafe.py` disassembliert das Spiel an jedem Namen aus
 `hooked` und meldet Gefahren für das Trampolin. Tödlich sind ein Sprung in die
 überschriebenen Bytes, eine Flags setzende Instruktion, die von ihrem Sprung
 getrennt wird, und überlappende Hooks. Außerdem warnt das Werkzeug vor
@@ -136,9 +137,10 @@ Sprünge zielen genau darauf. Der Hook dort ließ das Spiel abstürzen, sobald e
 Charakter mit leerem Skill-Slot geladen wurde. Von Hand hat die Suche drei
 Neustarts des Spiels gekostet. Die sichere Stelle ist `+0x1827DE`.
 
-`launcher/tools/build.ps1` erzeugt `addr.js` neu, wenn es coderpack aus den
-Quellen baut. `$Mappings` reicht es nur weiter, wenn dort `mappings.json`
-liegt. Sonst sucht coderpack das Register auf dem üblichen Weg.
+`agent/tools/install.ps1` erzeugt `addr.js` neu, packt den Agenten und
+installiert ihn ins Spiel. Ein Nachbar `../mappings` hat Vorrang vor dem
+Download, deshalb landet eine Änderung am Register schon vor jedem Release in
+deinem Spiel.
 
 ## Bauen
 
