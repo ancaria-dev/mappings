@@ -1,0 +1,37 @@
+name: release
+run-name: Release ${{ inputs.version }}${{ inputs.train != '' && format(' · train {0}', inputs.train) || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version: { description: Version, required: true, type: string }
+      notify: { description: Propagate downstream and refresh meta.json, type: boolean, default: true }
+      train: { description: Train id (set by devops), type: string, default: '' }
+
+concurrency: { group: release, cancel-in-progress: false }
+
+permissions: { contents: write }
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: prepare
+        uses: ancaria-dev/devops/.github/actions/prepare@master
+        with:
+          version: ${{ inputs.version }}
+
+      - name: mappings.json is current
+        if: steps.prepare.outputs.done != 'true'
+        run: python mappings.generator.py --check
+
+      - if: steps.prepare.outputs.done != 'true'
+        uses: ancaria-dev/devops/.github/actions/finish@master
+        with:
+          version: ${{ steps.prepare.outputs.version }}
+          files: mappings.json
+          notify: ${{ inputs.notify }}
+          app-id: ${{ vars.DEVOPS_APP_ID }}
+          app-key: ${{ secrets.DEVOPS_APP_KEY }}
