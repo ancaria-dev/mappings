@@ -29,7 +29,7 @@ Workspace rules, target build, and the no-typed-addresses rule: see `../CLAUDE.m
 
 - Only a row whose notes begin with an export tag reaches `mappings.json`. Untagged rows are documentation.
 - `[key=name]` on a VA+RVA row exports `rva.name`. On a single-address global it exports `va.name`.
-- `[key=name hooked]` also adds `name` to `hooked`: the agent attaches there, and `coderpack/tools/hooksafe.py` must pass it. Hook safety rules: see `../coderpack/CLAUDE.md`.
+- `[key=name hooked]` also adds `name` to `hooked`: the agent attaches there, and `agent/tools/hooksafe.py` must pass it. Hook safety rules: see `../agent/CLAUDE.md`.
 - Keys start with a letter, then letters, digits, or underscores. Keys are unique. Of two rows with the same address, at most one carries a key.
 - Never write bare `[hooked]`. Never mark a single-address global `hooked`; it has no code to intercept.
 
