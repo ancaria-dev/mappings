@@ -1,0 +1,19 @@
+# mappings.json is committed beside mappings.txt and every consumer reads it.
+# A stale JSON gives the agent wrong addresses, and a wrong address never
+# throws: its hook just stays silent. hooksafe.py needs the installed game, so
+# this check is all a runner can do.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Standard library only; the runner image already has python.
+      - name: mappings.json is current
+        run: python mappings.generator.py --check
